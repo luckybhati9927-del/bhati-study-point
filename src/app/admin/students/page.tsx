@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,9 +19,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { db } from "@/lib/firebase";
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { Student } from "@/lib/types";
-import { Search, Plus, Edit, Trash2, Calendar, ShieldCheck, AlertTriangle, Clock } from "lucide-react";
+import { Search, Plus, Edit, Trash2, Calendar, ShieldCheck, AlertTriangle, Clock, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { differenceInDays, parseISO, startOfDay } from "date-fns";
@@ -29,6 +29,7 @@ import { differenceInDays, parseISO, startOfDay } from "date-fns";
 export default function StudentManagement() {
   const [students, setStudents] = useState<Student[]>([]);
   const [search, setSearch] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<string | null>(null);
@@ -42,12 +43,29 @@ export default function StudentManagement() {
     membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
   });
 
+  const fetchStudents = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const querySnapshot = await getDocs(collection(db, "students"));
+      const studentData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Student[];
+      setStudents(studentData);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Connection Error",
+        description: "Failed to load students from Firestore.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "students"), (snapshot) => {
-      setStudents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Student[]);
-    });
-    return () => unsubscribe();
-  }, []);
+    fetchStudents();
+  }, [fetchStudents]);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,6 +101,7 @@ export default function StudentManagement() {
       updateDoc(doc(db, "students", editingStudent.id), data)
         .then(() => {
           toast({ title: "Updated", description: "Student updated successfully." });
+          fetchStudents(); // Refresh list
         })
         .catch(() => {
           toast({ variant: "destructive", title: "Error", description: "Failed to update student." });
@@ -94,6 +113,7 @@ export default function StudentManagement() {
       })
         .then(() => {
           toast({ title: "Created", description: "New student added successfully." });
+          fetchStudents(); // Refresh list
         })
         .catch(() => {
           toast({ variant: "destructive", title: "Error", description: "Failed to add student." });
@@ -117,6 +137,7 @@ export default function StudentManagement() {
     deleteDoc(doc(db, "students", studentToDelete))
       .then(() => {
         toast({ title: "Success", description: "Student deleted successfully." });
+        fetchStudents(); // Refresh list
       })
       .catch(() => {
         toast({ variant: "destructive", title: "Error", description: "Failed to delete student record." });
@@ -145,20 +166,31 @@ export default function StudentManagement() {
       <Navbar role="admin" />
       <main className="container mx-auto p-4 sm:p-6 space-y-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <h1 className="text-3xl font-bold font-headline text-primary tracking-tight">Manage Students</h1>
-          <Button onClick={() => { 
-            setEditingStudent(null); 
-            setFormData({
-              name: "",
-              mobile: "",
-              seatNumber: "",
-              membershipStartDate: new Date().toISOString().split('T')[0],
-              membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            });
-            setIsAddOpen(true); 
-          }} className="w-full sm:w-auto shadow-sm">
-            <Plus className="mr-2 h-4 w-4" /> Add Student
-          </Button>
+          <div className="space-y-1">
+            <h1 className="text-3xl font-bold font-headline text-primary tracking-tight">Manage Students</h1>
+            <p className="text-sm text-muted-foreground flex items-center gap-1">
+              <RefreshCw className={cn("h-3 w-3", isLoading && "animate-spin")} />
+              {isLoading ? "Syncing with Firestore..." : "Connected to Database"}
+            </p>
+          </div>
+          <div className="flex gap-2 w-full sm:w-auto">
+             <Button variant="outline" size="icon" onClick={fetchStudents} disabled={isLoading}>
+              <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+            </Button>
+            <Button onClick={() => { 
+              setEditingStudent(null); 
+              setFormData({
+                name: "",
+                mobile: "",
+                seatNumber: "",
+                membershipStartDate: new Date().toISOString().split('T')[0],
+                membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              });
+              setIsAddOpen(true); 
+            }} className="flex-1 sm:flex-initial shadow-sm">
+              <Plus className="mr-2 h-4 w-4" /> Add Student
+            </Button>
+          </div>
         </div>
 
         <Card className="border-none shadow-sm overflow-hidden">
@@ -186,7 +218,13 @@ export default function StudentManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredStudents.length === 0 ? (
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                        Loading student records...
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredStudents.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
                         No students found matching your search.
@@ -298,7 +336,7 @@ export default function StudentManagement() {
             <AlertDialogHeader>
               <AlertDialogTitle>Are you sure you want to delete this student?</AlertDialogTitle>
               <AlertDialogDescription>
-                This action cannot be undone. This will permanently remove the student's records and vacate their assigned seat.
+                This action cannot be undone. This will permanently remove the student's records from Firestore and vacate their assigned seat.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
