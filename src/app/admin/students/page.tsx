@@ -46,6 +46,7 @@ export default function StudentManagement() {
 
   useEffect(() => {
     setIsLoading(true);
+    // Real-time listener for the students collection ensures the list is always refreshed
     const unsubscribe = onSnapshot(
       collection(db, "students"),
       (snapshot) => {
@@ -56,7 +57,8 @@ export default function StudentManagement() {
         setStudents(studentData);
         setIsLoading(false);
       },
-      () => {
+      (error) => {
+        console.error("Firestore sync error:", error);
         toast({
           variant: "destructive",
           title: "Connection Error",
@@ -89,17 +91,17 @@ export default function StudentManagement() {
       }
     }
 
-    const data = {
-      name: formData.name,
-      mobile: formData.mobile,
-      seatNumber: seatNum,
-      membershipStartDate: formData.membershipStartDate,
-      membershipExpiryDate: formData.membershipExpiryDate,
-      role: "student" as const,
-      updatedAt: new Date().toISOString(),
-    };
-
     if (editingStudent) {
+      const data = {
+        name: formData.name,
+        mobile: formData.mobile,
+        seatNumber: seatNum,
+        membershipStartDate: formData.membershipStartDate,
+        membershipExpiryDate: formData.membershipExpiryDate,
+        role: "student" as const,
+        updatedAt: new Date().toISOString(),
+      };
+      
       const studentDocRef = doc(db, "students", editingStudent.id);
       updateDoc(studentDocRef, data)
         .then(() => {
@@ -107,16 +109,26 @@ export default function StudentManagement() {
           setIsAddOpen(false);
           setEditingStudent(null);
         })
-        .catch(() => {
+        .catch((error) => {
+          console.error("Error updating student:", error);
           toast({ variant: "destructive", title: "Update Failed", description: "Could not save changes to Firestore." });
         });
     } else {
-      const studentsCollectionRef = collection(db, "students");
-      addDoc(studentsCollectionRef, {
-        ...data,
+      // Logic for adding a new student using addDoc(collection(db, "students"), studentData)
+      const studentData = {
+        name: formData.name,
+        mobile: formData.mobile,
+        seatNumber: seatNum,
+        membershipStartDate: formData.membershipStartDate,
+        membershipExpiryDate: formData.membershipExpiryDate,
+        role: "student" as const,
         createdAt: new Date().toISOString(),
-      })
-        .then(() => {
+        updatedAt: new Date().toISOString(),
+      };
+
+      addDoc(collection(db, "students"), studentData)
+        .then((docRef) => {
+          console.log("Document written successfully with ID: ", docRef.id);
           toast({ title: "Student Registered", description: `${formData.name} has been added to the database.` });
           setFormData({ 
             name: "", 
@@ -127,8 +139,13 @@ export default function StudentManagement() {
           });
           setIsAddOpen(false);
         })
-        .catch(() => {
-          toast({ variant: "destructive", title: "Registration Failed", description: "Failed to create student record in Firestore." });
+        .catch((error) => {
+          console.error("Error adding student to Firestore: ", error);
+          toast({ 
+            variant: "destructive", 
+            title: "Registration Failed", 
+            description: error.message || "Failed to create student record in Firestore." 
+          });
         });
     }
   };
@@ -140,7 +157,8 @@ export default function StudentManagement() {
       .then(() => {
         toast({ title: "Success", description: "Student deleted successfully." });
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error("Error deleting student from Firestore:", error);
         toast({ variant: "destructive", title: "Error", description: "Failed to delete student record." });
       });
 
