@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { Student } from "@/lib/types";
@@ -40,24 +39,56 @@ export default function StudentManagement() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const seatNum = formData.seatNumber ? parseInt(formData.seatNumber) : null;
+
+    // Requirement: Every seat number must be unique.
+    // Check if another student already has that seat.
+    if (seatNum !== null) {
+      const isOccupied = students.some(s => 
+        s.seatNumber === seatNum && s.id !== editingStudent?.id
+      );
+
+      if (isOccupied) {
+        toast({
+          variant: "destructive",
+          title: "Seat Assignment Error",
+          description: "Seat already occupied. Please select another seat.",
+        });
+        return;
+      }
+    }
+
     try {
       const data = {
-        ...formData,
-        seatNumber: formData.seatNumber ? parseInt(formData.seatNumber) : null,
+        name: formData.name,
+        mobile: formData.mobile,
+        seatNumber: seatNum,
+        membershipStartDate: formData.membershipStartDate,
+        membershipExpiryDate: formData.membershipExpiryDate,
         role: "student" as const,
-        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
 
       if (editingStudent) {
         await updateDoc(doc(db, "students", editingStudent.id), data);
         toast({ title: "Updated", description: "Student updated successfully." });
       } else {
-        await addDoc(collection(db, "students"), data);
+        await addDoc(collection(db, "students"), {
+          ...data,
+          createdAt: new Date().toISOString(),
+        });
         toast({ title: "Created", description: "New student added successfully." });
       }
       setIsAddOpen(false);
       setEditingStudent(null);
-      setFormData({ name: "", mobile: "", seatNumber: "", membershipStartDate: new Date().toISOString().split('T')[0], membershipExpiryDate: "" });
+      setFormData({ 
+        name: "", 
+        mobile: "", 
+        seatNumber: "", 
+        membershipStartDate: new Date().toISOString().split('T')[0], 
+        membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] 
+      });
     } catch (error) {
       toast({ variant: "destructive", title: "Error", description: "Operation failed." });
     }
@@ -81,7 +112,17 @@ export default function StudentManagement() {
       <main className="container mx-auto p-4 sm:p-6 space-y-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <h1 className="text-3xl font-bold font-headline">Manage Students</h1>
-          <Button onClick={() => { setEditingStudent(null); setIsAddOpen(true); }} className="w-full sm:w-auto">
+          <Button onClick={() => { 
+            setEditingStudent(null); 
+            setFormData({
+              name: "",
+              mobile: "",
+              seatNumber: "",
+              membershipStartDate: new Date().toISOString().split('T')[0],
+              membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            });
+            setIsAddOpen(true); 
+          }} className="w-full sm:w-auto">
             <Plus className="mr-2 h-4 w-4" /> Add Student
           </Button>
         </div>
