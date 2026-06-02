@@ -101,7 +101,7 @@ export default function StudentManagement() {
       updateDoc(doc(db, "students", editingStudent.id), data)
         .then(() => {
           toast({ title: "Updated", description: "Student updated successfully." });
-          fetchStudents(); // Refresh list
+          fetchStudents();
         })
         .catch(() => {
           toast({ variant: "destructive", title: "Error", description: "Failed to update student." });
@@ -113,7 +113,7 @@ export default function StudentManagement() {
       })
         .then(() => {
           toast({ title: "Created", description: "New student added successfully." });
-          fetchStudents(); // Refresh list
+          fetchStudents();
         })
         .catch(() => {
           toast({ variant: "destructive", title: "Error", description: "Failed to add student." });
@@ -137,7 +137,7 @@ export default function StudentManagement() {
     deleteDoc(doc(db, "students", studentToDelete))
       .then(() => {
         toast({ title: "Success", description: "Student deleted successfully." });
-        fetchStudents(); // Refresh list
+        fetchStudents();
       })
       .catch(() => {
         toast({ variant: "destructive", title: "Error", description: "Failed to delete student record." });
