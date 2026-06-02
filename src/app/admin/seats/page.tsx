@@ -1,10 +1,9 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { SeatGrid } from "@/components/seats/SeatGrid";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, doc, updateDoc } from "firebase/firestore";
 import { Student } from "@/lib/types";
@@ -33,33 +32,32 @@ export default function AdminSeats() {
     setTargetStudentId(occupant?.id || "none");
   };
 
-  const handleAssign = async () => {
+  const handleAssign = () => {
     if (selectedSeat === null) return;
 
-    try {
-      // 1. Remove previous occupant of this seat if any
-      const previousOccupant = students.find(s => s.seatNumber === selectedSeat);
-      if (previousOccupant && previousOccupant.id !== targetStudentId) {
-        await updateDoc(doc(db, "students", previousOccupant.id), { seatNumber: null });
-      }
-
-      // 2. Assign to new student if not "none"
-      if (targetStudentId !== "none") {
-        // First check if target student was already in another seat
-        const studentToAssign = students.find(s => s.id === targetStudentId);
-        await updateDoc(doc(db, "students", targetStudentId), { seatNumber: selectedSeat });
-        toast({ title: "Seat Assigned", description: `Seat ${selectedSeat} assigned to ${studentToAssign?.name}.` });
-      } else if (previousOccupant) {
-        toast({ title: "Seat Vacated", description: `Seat ${selectedSeat} is now vacant.` });
-      }
-
-      setSelectedSeat(null);
-    } catch (error) {
-      toast({ variant: "destructive", title: "Error", description: "Failed to update seat assignment." });
+    // 1. Remove previous occupant of this seat if any
+    const previousOccupant = students.find(s => s.seatNumber === selectedSeat);
+    if (previousOccupant && previousOccupant.id !== targetStudentId) {
+      updateDoc(doc(db, "students", previousOccupant.id), { seatNumber: null })
+        .catch(() => toast({ variant: "destructive", title: "Error", description: "Failed to vacate old occupant." }));
     }
-  };
 
-  const unassignedStudents = students.filter(s => s.seatNumber === null);
+    // 2. Assign to new student if not "none"
+    if (targetStudentId !== "none") {
+      const studentToAssign = students.find(s => s.id === targetStudentId);
+      updateDoc(doc(db, "students", targetStudentId), { seatNumber: selectedSeat })
+        .then(() => {
+          toast({ title: "Seat Assigned", description: `Seat ${selectedSeat} assigned to ${studentToAssign?.name}.` });
+        })
+        .catch(() => {
+          toast({ variant: "destructive", title: "Error", description: "Failed to update seat assignment." });
+        });
+    } else if (previousOccupant) {
+      toast({ title: "Seat Vacated", description: `Seat ${selectedSeat} is now vacant.` });
+    }
+
+    setSelectedSeat(null);
+  };
 
   return (
     <div className="min-h-screen bg-background">

@@ -7,6 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
@@ -20,6 +30,7 @@ export default function StudentManagement() {
   const [search, setSearch] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [studentToDelete, setStudentToDelete] = useState<string | null>(null);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -37,7 +48,7 @@ export default function StudentManagement() {
     return () => unsubscribe();
   }, []);
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
 
     const seatNum = formData.seatNumber ? parseInt(formData.seatNumber) : null;
@@ -58,57 +69,60 @@ export default function StudentManagement() {
       }
     }
 
-    try {
-      const data = {
-        name: formData.name,
-        mobile: formData.mobile,
-        seatNumber: seatNum,
-        membershipStartDate: formData.membershipStartDate,
-        membershipExpiryDate: formData.membershipExpiryDate,
-        role: "student" as const,
-        updatedAt: new Date().toISOString(),
-      };
+    const data = {
+      name: formData.name,
+      mobile: formData.mobile,
+      seatNumber: seatNum,
+      membershipStartDate: formData.membershipStartDate,
+      membershipExpiryDate: formData.membershipExpiryDate,
+      role: "student" as const,
+      updatedAt: new Date().toISOString(),
+    };
 
-      if (editingStudent) {
-        await updateDoc(doc(db, "students", editingStudent.id), data);
-        toast({ title: "Updated", description: "Student updated successfully." });
-      } else {
-        await addDoc(collection(db, "students"), {
-          ...data,
-          createdAt: new Date().toISOString(),
+    if (editingStudent) {
+      updateDoc(doc(db, "students", editingStudent.id), data)
+        .then(() => {
+          toast({ title: "Updated", description: "Student updated successfully." });
+        })
+        .catch(() => {
+          toast({ variant: "destructive", title: "Error", description: "Failed to update student." });
         });
-        toast({ title: "Created", description: "New student added successfully." });
-      }
-      setIsAddOpen(false);
-      setEditingStudent(null);
-      setFormData({ 
-        name: "", 
-        mobile: "", 
-        seatNumber: "", 
-        membershipStartDate: new Date().toISOString().split('T')[0], 
-        membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] 
-      });
-    } catch (error) {
-      toast({ variant: "destructive", title: "Error", description: "Operation failed." });
+    } else {
+      addDoc(collection(db, "students"), {
+        ...data,
+        createdAt: new Date().toISOString(),
+      })
+        .then(() => {
+          toast({ title: "Created", description: "New student added successfully." });
+        })
+        .catch(() => {
+          toast({ variant: "destructive", title: "Error", description: "Failed to add student." });
+        });
     }
+    
+    setIsAddOpen(false);
+    setEditingStudent(null);
+    setFormData({ 
+      name: "", 
+      mobile: "", 
+      seatNumber: "", 
+      membershipStartDate: new Date().toISOString().split('T')[0], 
+      membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] 
+    });
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this student?")) {
-      try {
-        await deleteDoc(doc(db, "students", id));
-        toast({ 
-          title: "Success", 
-          description: "Student deleted successfully." 
-        });
-      } catch (error) {
-        toast({ 
-          variant: "destructive", 
-          title: "Error", 
-          description: "Failed to delete student record." 
-        });
-      }
-    }
+  const confirmDelete = () => {
+    if (!studentToDelete) return;
+
+    deleteDoc(doc(db, "students", studentToDelete))
+      .then(() => {
+        toast({ title: "Success", description: "Student deleted successfully." });
+      })
+      .catch(() => {
+        toast({ variant: "destructive", title: "Error", description: "Failed to delete student record." });
+      });
+
+    setStudentToDelete(null);
   };
 
   const filteredStudents = students.filter(s => 
@@ -214,7 +228,7 @@ export default function StudentManagement() {
                                 variant="ghost" 
                                 size="icon" 
                                 className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" 
-                                onClick={() => handleDelete(student.id)}
+                                onClick={() => setStudentToDelete(student.id)}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -266,6 +280,23 @@ export default function StudentManagement() {
             </form>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={!!studentToDelete} onOpenChange={(open) => !open && setStudentToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure you want to delete this student?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently remove the student's records and vacate their assigned seat.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Delete Record
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </main>
     </div>
   );
