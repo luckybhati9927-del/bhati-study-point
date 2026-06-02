@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -8,8 +7,9 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 import { Student } from "@/lib/types";
-import { Users, UserCheck, UserPlus, AlertCircle, Sparkles } from "lucide-react";
+import { Users, UserCheck, UserPlus, AlertCircle, Sparkles, Clock } from "lucide-react";
 import { aiMembershipStatusOverview } from "@/ai/flows/membership-status-categorization";
+import { differenceInDays, parseISO, startOfDay } from "date-fns";
 
 export default function AdminDashboard() {
   const [students, setStudents] = useState<Student[]>([]);
@@ -25,7 +25,6 @@ export default function AdminDashboard() {
       setStudents(studentData);
       setLoading(false);
       
-      // Get AI analysis
       if (studentData.length > 0) {
         aiMembershipStatusOverview({ students: studentData.map(s => ({
           id: s.id,
@@ -44,13 +43,24 @@ export default function AdminDashboard() {
   const totalSeats = 70;
   const occupiedSeats = students.filter(s => s.seatNumber !== null).length;
   const vacantSeats = totalSeats - occupiedSeats;
-  const expiredMemberships = students.filter(s => new Date(s.membershipExpiryDate) < new Date()).length;
+  
+  const today = startOfDay(new Date());
+  const expiringSoonCount = students.filter(s => {
+    const exp = startOfDay(parseISO(s.membershipExpiryDate));
+    const days = differenceInDays(exp, today);
+    return days >= 0 && days <= 7;
+  }).length;
+  
+  const expiredCount = students.filter(s => {
+    const exp = startOfDay(parseISO(s.membershipExpiryDate));
+    return differenceInDays(exp, today) < 0;
+  }).length;
 
   const stats = [
     { label: "Total Students", value: students.length, icon: Users, color: "text-blue-600", bg: "bg-blue-50" },
-    { label: "Occupied Seats", value: occupiedSeats, icon: UserCheck, color: "text-indigo-600", bg: "bg-indigo-50" },
+    { label: "Expiring Soon", value: expiringSoonCount, icon: Clock, color: "text-amber-600", bg: "bg-amber-50" },
     { label: "Vacant Seats", value: vacantSeats, icon: UserPlus, color: "text-emerald-600", bg: "bg-emerald-50" },
-    { label: "Expired", value: expiredMemberships, icon: AlertCircle, color: "text-rose-600", bg: "bg-rose-50" },
+    { label: "Expired", value: expiredCount, icon: AlertCircle, color: "text-rose-600", bg: "bg-rose-50" },
   ];
 
   return (
@@ -67,7 +77,7 @@ export default function AdminDashboard() {
             <Card key={stat.label} className="border-none shadow-sm overflow-hidden group hover:shadow-md transition-shadow">
               <CardContent className="p-6 flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">{stat.label}</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{stat.label}</p>
                   <p className="text-3xl font-bold font-headline mt-1">{stat.value}</p>
                 </div>
                 <div className={`${stat.bg} p-3 rounded-xl group-hover:scale-110 transition-transform`}>
@@ -82,7 +92,7 @@ export default function AdminDashboard() {
           <Card className="lg:col-span-2 border-none shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-xl font-headline">Seat Visualizer</CardTitle>
-              <div className="text-sm text-muted-foreground font-medium">70 Seats Total</div>
+              <div className="text-xs text-muted-foreground font-bold uppercase tracking-widest">70 Seats Total</div>
             </CardHeader>
             <CardContent>
               <SeatGrid students={students} isAdmin={true} />
@@ -104,13 +114,13 @@ export default function AdminDashboard() {
                   </p>
                 </div>
                 <div className="space-y-3">
-                  <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Recent Activity</h4>
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Recent Activity</h4>
                   <div className="space-y-2">
-                    {students.slice(0, 3).map(s => (
+                    {students.slice(-3).reverse().map(s => (
                       <div key={s.id} className="flex items-center gap-3 text-sm">
                         <div className="w-2 h-2 rounded-full bg-primary" />
                         <span className="font-medium">{s.name}</span>
-                        <span className="text-muted-foreground text-xs ml-auto">{s.createdAt.split('T')[0]}</span>
+                        <span className="text-muted-foreground text-[10px] ml-auto">{s.createdAt.split('T')[0]}</span>
                       </div>
                     ))}
                   </div>

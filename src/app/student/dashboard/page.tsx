@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -8,8 +7,9 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, collection, onSnapshot } from "firebase/firestore";
 import { Student } from "@/lib/types";
-import { Calendar, Clock, MapPin, User, ArrowRight, ShieldCheck } from "lucide-react";
-import { differenceInDays, parseISO } from "date-fns";
+import { Clock, MapPin, ShieldCheck, AlertTriangle } from "lucide-react";
+import { differenceInDays, parseISO, startOfDay } from "date-fns";
+import { cn } from "@/lib/utils";
 
 export default function StudentDashboard() {
   const [student, setStudent] = useState<Student | null>(null);
@@ -43,9 +43,12 @@ export default function StudentDashboard() {
   const occupiedCount = allStudents.filter(s => s.seatNumber !== null).length;
   const vacantCount = totalSeats - occupiedCount;
   
-  const remainingDays = student 
-    ? differenceInDays(parseISO(student.membershipExpiryDate), new Date()) 
-    : 0;
+  const today = startOfDay(new Date());
+  const expiryDate = student ? startOfDay(parseISO(student.membershipExpiryDate)) : today;
+  const diffDays = differenceInDays(expiryDate, today);
+  const remainingDays = Math.max(0, diffDays);
+  const isExpired = diffDays < 0;
+  const isExpiringSoon = diffDays >= 0 && diffDays <= 7;
 
   return (
     <div className="min-h-screen bg-background">
@@ -61,7 +64,10 @@ export default function StudentDashboard() {
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="md:col-span-2 border-none shadow-xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground">
+          <Card className={cn(
+            "md:col-span-2 border-none shadow-xl text-primary-foreground transition-colors duration-500",
+            isExpired ? "bg-destructive" : isExpiringSoon ? "bg-warning" : "bg-primary"
+          )}>
             <CardContent className="p-8">
               <div className="flex flex-col sm:flex-row justify-between gap-8 h-full">
                 <div className="space-y-6 flex-1">
@@ -80,7 +86,9 @@ export default function StudentDashboard() {
                     </div>
                     <div>
                       <p className="text-white/70 text-sm font-medium">Time Remaining</p>
-                      <p className="text-3xl font-bold font-headline">{remainingDays > 0 ? `${remainingDays} Days` : "Expired"}</p>
+                      <p className="text-3xl font-bold font-headline">
+                        {isExpired ? "Expired" : `${remainingDays} Days`}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -94,10 +102,13 @@ export default function StudentDashboard() {
                     <div className="flex justify-between items-center gap-4 text-xs font-bold uppercase tracking-widest">
                       <span>Status</span>
                       <span className={cn(
-                        "px-2 py-0.5 rounded",
-                        remainingDays > 0 ? "bg-emerald-400 text-emerald-950" : "bg-rose-400 text-rose-950"
+                        "px-2 py-0.5 rounded flex items-center gap-1",
+                        isExpired ? "bg-white text-destructive" : 
+                        isExpiringSoon ? "bg-white text-warning" : 
+                        "bg-white text-primary"
                       )}>
-                        {remainingDays > 0 ? "Active" : "Expired"}
+                        {isExpired && <AlertTriangle className="h-3 w-3" />}
+                        {isExpired ? "Expired" : isExpiringSoon ? "Expiring Soon" : "Active"}
                       </span>
                     </div>
                   </div>

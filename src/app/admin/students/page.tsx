@@ -21,9 +21,10 @@ import { Label } from "@/components/ui/label";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { Student } from "@/lib/types";
-import { Search, Plus, Edit, Trash2, Calendar } from "lucide-react";
+import { Search, Plus, Edit, Trash2, Calendar, ShieldCheck, AlertTriangle, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { differenceInDays, parseISO, startOfDay } from "date-fns";
 
 export default function StudentManagement() {
   const [students, setStudents] = useState<Student[]>([]);
@@ -53,7 +54,6 @@ export default function StudentManagement() {
 
     const seatNum = formData.seatNumber ? parseInt(formData.seatNumber) : null;
 
-    // Requirement: Every seat number must be unique.
     if (seatNum !== null) {
       const isOccupied = students.some(s => 
         s.seatNumber === seatNum && s.id !== editingStudent?.id
@@ -130,6 +130,16 @@ export default function StudentManagement() {
     s.mobile.includes(search)
   );
 
+  const getStatus = (expiryDate: string) => {
+    const today = startOfDay(new Date());
+    const exp = startOfDay(parseISO(expiryDate));
+    const days = differenceInDays(exp, today);
+
+    if (days < 0) return { label: "Expired", color: "bg-destructive text-destructive-foreground", icon: AlertTriangle };
+    if (days <= 7) return { label: "Expiring Soon", color: "bg-warning text-warning-foreground", icon: Clock };
+    return { label: "Active", color: "bg-success text-success-foreground", icon: ShieldCheck };
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar role="admin" />
@@ -171,7 +181,7 @@ export default function StudentManagement() {
                     <TableHead className="font-semibold">Student</TableHead>
                     <TableHead className="font-semibold">Mobile</TableHead>
                     <TableHead className="font-semibold">Seat</TableHead>
-                    <TableHead className="hidden md:table-cell font-semibold">Membership</TableHead>
+                    <TableHead className="hidden md:table-cell font-semibold">Status</TableHead>
                     <TableHead className="text-right font-semibold">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -184,7 +194,7 @@ export default function StudentManagement() {
                     </TableRow>
                   ) : (
                     filteredStudents.map((student) => {
-                      const isExpired = new Date(student.membershipExpiryDate) < new Date();
+                      const status = getStatus(student.membershipExpiryDate);
                       return (
                         <TableRow key={student.id} className="group transition-colors">
                           <TableCell>
@@ -202,11 +212,13 @@ export default function StudentManagement() {
                             </span>
                           </TableCell>
                           <TableCell className="hidden md:table-cell">
-                            <div className="text-xs space-y-1">
-                              <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
-                                <Calendar className="h-3 w-3" /> Ends {student.membershipExpiryDate}
-                              </div>
-                              {isExpired && <div className="text-destructive font-bold uppercase tracking-tighter">Expired</div>}
+                            <div className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider", status.color)}>
+                              <status.icon className="h-3 w-3" />
+                              {status.label}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground mt-1 ml-1 flex items-center gap-1">
+                              <Calendar className="h-2.5 w-2.5" />
+                              {student.membershipExpiryDate}
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
