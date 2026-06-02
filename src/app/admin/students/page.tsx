@@ -43,7 +43,6 @@ export default function StudentManagement() {
     const seatNum = formData.seatNumber ? parseInt(formData.seatNumber) : null;
 
     // Requirement: Every seat number must be unique.
-    // Check if another student already has that seat.
     if (seatNum !== null) {
       const isOccupied = students.some(s => 
         s.seatNumber === seatNum && s.id !== editingStudent?.id
@@ -95,9 +94,20 @@ export default function StudentManagement() {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm("Are you sure?")) {
-      await deleteDoc(doc(db, "students", id));
-      toast({ title: "Deleted", description: "Student record removed." });
+    if (confirm("Are you sure you want to delete this student?")) {
+      try {
+        await deleteDoc(doc(db, "students", id));
+        toast({ 
+          title: "Success", 
+          description: "Student deleted successfully." 
+        });
+      } catch (error) {
+        toast({ 
+          variant: "destructive", 
+          title: "Error", 
+          description: "Failed to delete student record." 
+        });
+      }
     }
   };
 
@@ -111,7 +121,7 @@ export default function StudentManagement() {
       <Navbar role="admin" />
       <main className="container mx-auto p-4 sm:p-6 space-y-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <h1 className="text-3xl font-bold font-headline">Manage Students</h1>
+          <h1 className="text-3xl font-bold font-headline text-primary tracking-tight">Manage Students</h1>
           <Button onClick={() => { 
             setEditingStudent(null); 
             setFormData({
@@ -122,18 +132,18 @@ export default function StudentManagement() {
               membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             });
             setIsAddOpen(true); 
-          }} className="w-full sm:w-auto">
+          }} className="w-full sm:w-auto shadow-sm">
             <Plus className="mr-2 h-4 w-4" /> Add Student
           </Button>
         </div>
 
-        <Card className="border-none shadow-sm">
-          <CardHeader className="pb-3">
+        <Card className="border-none shadow-sm overflow-hidden">
+          <CardHeader className="pb-3 border-b bg-muted/30">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search by name or mobile..."
-                className="pl-10 h-11"
+                className="pl-10 h-11 bg-background"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -143,62 +153,77 @@ export default function StudentManagement() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Student</TableHead>
-                    <TableHead>Mobile</TableHead>
-                    <TableHead>Seat</TableHead>
-                    <TableHead className="hidden md:table-cell">Membership</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                  <TableRow className="hover:bg-transparent bg-muted/10">
+                    <TableHead className="font-semibold">Student</TableHead>
+                    <TableHead className="font-semibold">Mobile</TableHead>
+                    <TableHead className="font-semibold">Seat</TableHead>
+                    <TableHead className="hidden md:table-cell font-semibold">Membership</TableHead>
+                    <TableHead className="text-right font-semibold">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredStudents.map((student) => {
-                    const isExpired = new Date(student.membershipExpiryDate) < new Date();
-                    return (
-                      <TableRow key={student.id}>
-                        <TableCell>
-                          <div className="font-medium">{student.name}</div>
-                        </TableCell>
-                        <TableCell>{student.mobile}</TableCell>
-                        <TableCell>
-                          <span className={cn(
-                            "px-2 py-1 rounded-md text-xs font-bold",
-                            student.seatNumber ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                          )}>
-                            {student.seatNumber ? `Seat ${student.seatNumber}` : "Unassigned"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <div className="text-xs space-y-0.5">
-                            <div className="flex items-center gap-1 text-muted-foreground">
-                              <Calendar className="h-3 w-3" /> Ends {student.membershipExpiryDate}
+                  {filteredStudents.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                        No students found matching your search.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredStudents.map((student) => {
+                      const isExpired = new Date(student.membershipExpiryDate) < new Date();
+                      return (
+                        <TableRow key={student.id} className="group transition-colors">
+                          <TableCell>
+                            <div className="font-bold text-foreground">{student.name}</div>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground font-medium">{student.mobile}</TableCell>
+                          <TableCell>
+                            <span className={cn(
+                              "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                              student.seatNumber 
+                                ? "bg-primary/10 text-primary border border-primary/20" 
+                                : "bg-muted text-muted-foreground border border-muted-foreground/10"
+                            )}>
+                              {student.seatNumber ? `Seat ${student.seatNumber}` : "Unassigned"}
+                            </span>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            <div className="text-xs space-y-1">
+                              <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
+                                <Calendar className="h-3 w-3" /> Ends {student.membershipExpiryDate}
+                              </div>
+                              {isExpired && <div className="text-destructive font-bold uppercase tracking-tighter">Expired</div>}
                             </div>
-                            {isExpired && <div className="text-destructive font-bold">Expired</div>}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button variant="ghost" size="icon" onClick={() => {
-                              setEditingStudent(student);
-                              setFormData({
-                                name: student.name,
-                                mobile: student.mobile,
-                                seatNumber: student.seatNumber?.toString() || "",
-                                membershipStartDate: student.membershipStartDate,
-                                membershipExpiryDate: student.membershipExpiryDate,
-                              });
-                              setIsAddOpen(true);
-                            }}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleDelete(student.id)} className="text-destructive">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10" onClick={() => {
+                                setEditingStudent(student);
+                                setFormData({
+                                  name: student.name,
+                                  mobile: student.mobile,
+                                  seatNumber: student.seatNumber?.toString() || "",
+                                  membershipStartDate: student.membershipStartDate,
+                                  membershipExpiryDate: student.membershipExpiryDate,
+                                });
+                                setIsAddOpen(true);
+                              }}>
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" 
+                                onClick={() => handleDelete(student.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -206,35 +231,37 @@ export default function StudentManagement() {
         </Card>
 
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md border-none shadow-2xl">
             <DialogHeader>
-              <DialogTitle className="font-headline">{editingStudent ? "Edit Student" : "Add New Student"}</DialogTitle>
+              <DialogTitle className="font-headline text-2xl text-primary">{editingStudent ? "Edit Student Details" : "Add New Student"}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSave} className="space-y-4 pt-4">
+            <form onSubmit={handleSave} className="space-y-5 pt-4">
               <div className="space-y-2">
-                <Label>Full Name</Label>
-                <Input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Full Name</Label>
+                <Input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="h-11 shadow-sm" />
               </div>
               <div className="space-y-2">
-                <Label>Mobile Number</Label>
-                <Input required value={formData.mobile} onChange={e => setFormData({...formData, mobile: e.target.value})} />
+                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Mobile Number</Label>
+                <Input required value={formData.mobile} onChange={e => setFormData({...formData, mobile: e.target.value})} className="h-11 shadow-sm" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Seat Number (1-70)</Label>
-                  <Input type="number" min="1" max="70" value={formData.seatNumber} onChange={e => setFormData({...formData, seatNumber: e.target.value})} />
+                  <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Seat (1-70)</Label>
+                  <Input type="number" min="1" max="70" value={formData.seatNumber} onChange={e => setFormData({...formData, seatNumber: e.target.value})} className="h-11 shadow-sm" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Start Date</Label>
-                  <Input type="date" value={formData.membershipStartDate} onChange={e => setFormData({...formData, membershipStartDate: e.target.value})} />
+                  <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Start Date</Label>
+                  <Input type="date" value={formData.membershipStartDate} onChange={e => setFormData({...formData, membershipStartDate: e.target.value})} className="h-11 shadow-sm" />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Expiry Date</Label>
-                <Input type="date" required value={formData.membershipExpiryDate} onChange={e => setFormData({...formData, membershipExpiryDate: e.target.value})} />
+                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Expiry Date</Label>
+                <Input type="date" required value={formData.membershipExpiryDate} onChange={e => setFormData({...formData, membershipExpiryDate: e.target.value})} className="h-11 shadow-sm border-primary/20" />
               </div>
               <DialogFooter className="pt-4">
-                <Button type="submit" className="w-full">Save Changes</Button>
+                <Button type="submit" className="w-full h-12 text-lg font-bold shadow-lg shadow-primary/20">
+                  {editingStudent ? "Update Records" : "Register Student"}
+                </Button>
               </DialogFooter>
             </form>
           </DialogContent>
