@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { Student } from "@/lib/types";
 import { Search, Plus, Edit, Trash2, Calendar, ShieldCheck, AlertTriangle, Clock, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -43,29 +44,30 @@ export default function StudentManagement() {
     membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
   });
 
-  const fetchStudents = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const querySnapshot = await getDocs(collection(db, "students"));
-      const studentData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Student[];
-      setStudents(studentData);
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Connection Error",
-        description: "Failed to load students from Firestore.",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [toast]);
-
   useEffect(() => {
-    fetchStudents();
-  }, [fetchStudents]);
+    setIsLoading(true);
+    const unsubscribe = onSnapshot(
+      collection(db, "students"),
+      (snapshot) => {
+        const studentData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Student[];
+        setStudents(studentData);
+        setIsLoading(false);
+      },
+      () => {
+        toast({
+          variant: "destructive",
+          title: "Connection Error",
+          description: "Failed to sync student records from Firestore.",
+        });
+        setIsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [toast]);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,10 +106,8 @@ export default function StudentManagement() {
           toast({ title: "Updated", description: "Student updated successfully." });
           setIsAddOpen(false);
           setEditingStudent(null);
-          fetchStudents();
         })
-        .catch((error) => {
-          console.error("Error updating student:", error);
+        .catch(() => {
           toast({ variant: "destructive", title: "Update Failed", description: "Could not save changes to Firestore." });
         });
     } else {
@@ -126,10 +126,8 @@ export default function StudentManagement() {
             membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] 
           });
           setIsAddOpen(false);
-          fetchStudents();
         })
-        .catch((error) => {
-          console.error("Error adding student:", error);
+        .catch(() => {
           toast({ variant: "destructive", title: "Registration Failed", description: "Failed to create student record in Firestore." });
         });
     }
@@ -141,7 +139,6 @@ export default function StudentManagement() {
     deleteDoc(doc(db, "students", studentToDelete))
       .then(() => {
         toast({ title: "Success", description: "Student deleted successfully." });
-        fetchStudents();
       })
       .catch(() => {
         toast({ variant: "destructive", title: "Error", description: "Failed to delete student record." });
@@ -174,13 +171,10 @@ export default function StudentManagement() {
             <h1 className="text-3xl font-bold font-headline text-primary tracking-tight">Manage Students</h1>
             <p className="text-sm text-muted-foreground flex items-center gap-1">
               <RefreshCw className={cn("h-3 w-3", isLoading && "animate-spin")} />
-              {isLoading ? "Syncing with Firestore..." : "Connected to Database"}
+              {isLoading ? "Syncing..." : "Live Connection"}
             </p>
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
-             <Button variant="outline" size="icon" onClick={fetchStudents} disabled={isLoading}>
-              <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
-            </Button>
             <Button onClick={() => { 
               setEditingStudent(null); 
               setFormData({
