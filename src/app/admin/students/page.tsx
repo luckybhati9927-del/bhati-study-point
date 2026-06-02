@@ -55,7 +55,6 @@ export default function StudentManagement() {
 
   useEffect(() => {
     setIsLoading(true);
-    // Real-time listener for the students collection ensures data is always synced from Firestore
     const q = query(collection(db, "students"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(
       q,
@@ -103,31 +102,28 @@ export default function StudentManagement() {
     }
 
     try {
+      const studentData = {
+        name: formData.name,
+        mobile: formData.mobile,
+        seatNumber: seatNum,
+        membershipStartDate: formData.membershipStartDate,
+        membershipExpiryDate: formData.membershipExpiryDate,
+        updatedAt: new Date().toISOString(),
+      };
+
       if (editingStudent) {
         // Update existing record
         const studentDocRef = doc(db, "students", editingStudent.id);
-        await updateDoc(studentDocRef, {
-          name: formData.name,
-          mobile: formData.mobile,
-          seatNumber: seatNum,
-          membershipStartDate: formData.membershipStartDate,
-          membershipExpiryDate: formData.membershipExpiryDate,
-          updatedAt: new Date().toISOString(),
-        });
-        toast({ title: "Updated", description: "Student details saved to database." });
+        await updateDoc(studentDocRef, studentData);
+        toast({ title: "Updated", description: "Student details saved successfully." });
       } else {
-        // Create new record
+        // Create new record - Explicitly using addDoc to collection(db, "students")
         await addDoc(collection(db, "students"), {
-          name: formData.name,
-          mobile: formData.mobile,
-          seatNumber: seatNum,
-          membershipStartDate: formData.membershipStartDate,
-          membershipExpiryDate: formData.membershipExpiryDate,
+          ...studentData,
           role: "student",
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
         });
-        toast({ title: "Registered", description: "New student added to database successfully." });
+        toast({ title: "Registered", description: "New student added to database." });
       }
       
       setIsAddOpen(false);
@@ -143,27 +139,21 @@ export default function StudentManagement() {
       console.error("Firestore write error:", error);
       toast({
         variant: "destructive",
-        title: "Registration Failed",
-        description: "Could not save records to Firestore. Check your connection.",
+        title: "Error",
+        description: "Failed to save record to Firestore.",
       });
     }
   };
 
   const confirmDelete = async () => {
     if (!studentToDelete) return;
-
     try {
       await deleteDoc(doc(db, "students", studentToDelete));
-      toast({ title: "Record Deleted", description: "Student record has been permanently removed." });
+      toast({ title: "Deleted", description: "Student record removed." });
     } catch (error) {
       console.error("Firestore delete error:", error);
-      toast({
-        variant: "destructive",
-        title: "Deletion Failed",
-        description: "Failed to remove student from database.",
-      });
+      toast({ variant: "destructive", title: "Error", description: "Failed to delete record." });
     }
-
     setStudentToDelete(null);
   };
 
@@ -191,24 +181,22 @@ export default function StudentManagement() {
             <h1 className="text-3xl font-bold font-headline text-primary tracking-tight">Manage Students</h1>
             <p className="text-sm text-muted-foreground flex items-center gap-1">
               <RefreshCw className={cn("h-3 w-3", isLoading && "animate-spin")} />
-              {isLoading ? "Syncing..." : "Live Cloud Connection"}
+              {isLoading ? "Syncing..." : "Connected to Database"}
             </p>
           </div>
-          <div className="flex gap-2 w-full sm:w-auto">
-            <Button onClick={() => { 
-              setEditingStudent(null); 
-              setFormData({
-                name: "",
-                mobile: "",
-                seatNumber: "",
-                membershipStartDate: new Date().toISOString().split('T')[0],
-                membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-              });
-              setIsAddOpen(true); 
-            }} className="flex-1 sm:flex-initial shadow-sm">
-              <Plus className="mr-2 h-4 w-4" /> Add Student
-            </Button>
-          </div>
+          <Button onClick={() => { 
+            setEditingStudent(null); 
+            setFormData({
+              name: "",
+              mobile: "",
+              seatNumber: "",
+              membershipStartDate: new Date().toISOString().split('T')[0],
+              membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            });
+            setIsAddOpen(true); 
+          }}>
+            <Plus className="mr-2 h-4 w-4" /> Add Student
+          </Button>
         </div>
 
         <Card className="border-none shadow-sm overflow-hidden">
@@ -224,125 +212,108 @@ export default function StudentManagement() {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent bg-muted/10">
-                    <TableHead className="font-semibold">Student</TableHead>
-                    <TableHead className="font-semibold">Mobile</TableHead>
-                    <TableHead className="font-semibold">Seat</TableHead>
-                    <TableHead className="hidden md:table-cell font-semibold">Status</TableHead>
-                    <TableHead className="text-right font-semibold">Actions</TableHead>
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/10">
+                  <TableHead>Student</TableHead>
+                  <TableHead>Mobile</TableHead>
+                  <TableHead>Seat</TableHead>
+                  <TableHead className="hidden md:table-cell">Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">Syncing records...</TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
-                        Loading student records...
-                      </TableCell>
-                    </TableRow>
-                  ) : filteredStudents.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
-                        No students found matching your search.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredStudents.map((student) => {
-                      const status = getStatus(student.membershipExpiryDate);
-                      return (
-                        <TableRow key={student.id} className="group transition-colors">
-                          <TableCell>
-                            <div className="font-bold text-foreground">{student.name}</div>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground font-medium">{student.mobile}</TableCell>
-                          <TableCell>
-                            <span className={cn(
-                              "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                              student.seatNumber 
-                                ? "bg-primary/10 text-primary border border-primary/20" 
-                                : "bg-muted text-muted-foreground border border-muted-foreground/10"
-                            )}>
-                              {student.seatNumber ? `Seat ${student.seatNumber}` : "Unassigned"}
-                            </span>
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell">
-                            <div className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider", status.color)}>
-                              <status.icon className="h-3 w-3" />
-                              {status.label}
-                            </div>
-                            <div className="text-[10px] text-muted-foreground mt-1 ml-1 flex items-center gap-1">
-                              <Calendar className="h-2.5 w-2.5" />
-                              Exp: {student.membershipExpiryDate}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10" onClick={() => {
-                                setEditingStudent(student);
-                                setFormData({
-                                  name: student.name,
-                                  mobile: student.mobile,
-                                  seatNumber: student.seatNumber?.toString() || "",
-                                  membershipStartDate: student.membershipStartDate,
-                                  membershipExpiryDate: student.membershipExpiryDate,
-                                });
-                                setIsAddOpen(true);
-                              }}>
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" 
-                                onClick={() => setStudentToDelete(student.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                ) : filteredStudents.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No students found.</TableCell>
+                  </TableRow>
+                ) : (
+                  filteredStudents.map((student) => {
+                    const status = getStatus(student.membershipExpiryDate);
+                    return (
+                      <TableRow key={student.id} className="group">
+                        <TableCell><div className="font-bold">{student.name}</div></TableCell>
+                        <TableCell className="text-muted-foreground">{student.mobile}</TableCell>
+                        <TableCell>
+                          <span className={cn(
+                            "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                            student.seatNumber ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                          )}>
+                            {student.seatNumber ? `Seat ${student.seatNumber}` : "Unassigned"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <div className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase", status.color)}>
+                            <status.icon className="h-3 w-3" />
+                            {status.label}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => {
+                              setEditingStudent(student);
+                              setFormData({
+                                name: student.name,
+                                mobile: student.mobile,
+                                seatNumber: student.seatNumber?.toString() || "",
+                                membershipStartDate: student.membershipStartDate,
+                                membershipExpiryDate: student.membershipExpiryDate,
+                              });
+                              setIsAddOpen(true);
+                            }}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setStudentToDelete(student.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
 
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogContent className="max-w-md border-none shadow-2xl">
+          <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle className="font-headline text-2xl text-primary">{editingStudent ? "Edit Student Details" : "Add New Student"}</DialogTitle>
+              <DialogTitle className="font-headline text-2xl text-primary">
+                {editingStudent ? "Edit Student" : "Add Student"}
+              </DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSave} className="space-y-5 pt-4">
+            <form onSubmit={handleSave} className="space-y-4 pt-4">
               <div className="space-y-2">
-                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Full Name</Label>
-                <Input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="h-11 shadow-sm" />
+                <Label>Full Name</Label>
+                <Input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
               </div>
               <div className="space-y-2">
-                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Mobile Number</Label>
-                <Input required value={formData.mobile} onChange={e => setFormData({...formData, mobile: e.target.value})} className="h-11 shadow-sm" />
+                <Label>Mobile Number</Label>
+                <Input required value={formData.mobile} onChange={e => setFormData({...formData, mobile: e.target.value})} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Seat (1-70)</Label>
-                  <Input type="number" min="1" max="70" value={formData.seatNumber} onChange={e => setFormData({...formData, seatNumber: e.target.value})} className="h-11 shadow-sm" />
+                  <Label>Seat (1-70)</Label>
+                  <Input type="number" min="1" max="70" value={formData.seatNumber} onChange={e => setFormData({...formData, seatNumber: e.target.value})} />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Start Date</Label>
-                  <Input type="date" value={formData.membershipStartDate} onChange={e => setFormData({...formData, membershipStartDate: e.target.value})} className="h-11 shadow-sm" />
+                  <Label>Start Date</Label>
+                  <Input type="date" value={formData.membershipStartDate} onChange={e => setFormData({...formData, membershipStartDate: e.target.value})} />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Expiry Date</Label>
-                <Input type="date" required value={formData.membershipExpiryDate} onChange={e => setFormData({...formData, membershipExpiryDate: e.target.value})} className="h-11 shadow-sm border-primary/20" />
+                <Label>Expiry Date</Label>
+                <Input type="date" required value={formData.membershipExpiryDate} onChange={e => setFormData({...formData, membershipExpiryDate: e.target.value})} />
               </div>
               <DialogFooter className="pt-4">
-                <Button type="submit" className="w-full h-12 text-lg font-bold shadow-lg shadow-primary/20">
-                  {editingStudent ? "Update Record" : "Register Student"}
+                <Button type="submit" className="w-full">
+                  {editingStudent ? "Update Record" : "Add to Firestore"}
                 </Button>
               </DialogFooter>
             </form>
@@ -352,16 +323,12 @@ export default function StudentManagement() {
         <AlertDialog open={!!studentToDelete} onOpenChange={(open) => !open && setStudentToDelete(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to delete this student? This will permanently remove their record from Firestore and vacate their seat.
-              </AlertDialogDescription>
+              <AlertDialogTitle>Delete Record?</AlertDialogTitle>
+              <AlertDialogDescription>This action will permanently remove the student from the database.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                Delete Record
-              </AlertDialogAction>
+              <AlertDialogAction onClick={confirmDelete} className="bg-destructive">Delete</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
