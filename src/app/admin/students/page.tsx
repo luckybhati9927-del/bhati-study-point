@@ -98,37 +98,41 @@ export default function StudentManagement() {
     };
 
     if (editingStudent) {
-      updateDoc(doc(db, "students", editingStudent.id), data)
+      const studentDocRef = doc(db, "students", editingStudent.id);
+      updateDoc(studentDocRef, data)
         .then(() => {
           toast({ title: "Updated", description: "Student updated successfully." });
+          setIsAddOpen(false);
+          setEditingStudent(null);
           fetchStudents();
         })
-        .catch(() => {
-          toast({ variant: "destructive", title: "Error", description: "Failed to update student." });
+        .catch((error) => {
+          console.error("Error updating student:", error);
+          toast({ variant: "destructive", title: "Update Failed", description: "Could not save changes to Firestore." });
         });
     } else {
-      addDoc(collection(db, "students"), {
+      const studentsCollectionRef = collection(db, "students");
+      addDoc(studentsCollectionRef, {
         ...data,
         createdAt: new Date().toISOString(),
       })
         .then(() => {
-          toast({ title: "Created", description: "New student added successfully." });
+          toast({ title: "Student Registered", description: `${formData.name} has been added to the database.` });
+          setFormData({ 
+            name: "", 
+            mobile: "", 
+            seatNumber: "", 
+            membershipStartDate: new Date().toISOString().split('T')[0], 
+            membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] 
+          });
+          setIsAddOpen(false);
           fetchStudents();
         })
-        .catch(() => {
-          toast({ variant: "destructive", title: "Error", description: "Failed to add student." });
+        .catch((error) => {
+          console.error("Error adding student:", error);
+          toast({ variant: "destructive", title: "Registration Failed", description: "Failed to create student record in Firestore." });
         });
     }
-    
-    setIsAddOpen(false);
-    setEditingStudent(null);
-    setFormData({ 
-      name: "", 
-      mobile: "", 
-      seatNumber: "", 
-      membershipStartDate: new Date().toISOString().split('T')[0], 
-      membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] 
-    });
   };
 
   const confirmDelete = () => {
