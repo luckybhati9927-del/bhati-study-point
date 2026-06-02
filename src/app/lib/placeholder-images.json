@@ -1,0 +1,17 @@
+
+{
+  "placeholderImages": [
+    {
+      "id": "hero-library",
+      "description": "A modern, well-lit study space with organized desks.",
+      "imageUrl": "https://picsum.photos/seed/library1/1200/600",
+      "imageHint": "modern library"
+    },
+    {
+      "id": "student-studying",
+      "description": "A student focused on their books in a quiet environment.",
+      "imageUrl": "https://picsum.photos/seed/student1/600/400",
+      "imageHint": "student studying"
+    }
+  ]
+}
