@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,16 +22,16 @@ import { Label } from "@/components/ui/label";
 import { db } from "@/lib/firebase";
 import { 
   collection, 
-  onSnapshot, 
   addDoc, 
   updateDoc, 
   deleteDoc, 
   doc, 
-  query, 
-  orderBy 
+  getDocs,
+  query,
+  orderBy
 } from "firebase/firestore";
 import { Student } from "@/lib/types";
-import { Search, Plus, Edit, Trash2, Calendar, ShieldCheck, AlertTriangle, Clock, RefreshCw } from "lucide-react";
+import { Search, Plus, Edit, Trash2, ShieldCheck, AlertTriangle, Clock, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { differenceInDays, parseISO, startOfDay } from "date-fns";
@@ -39,7 +39,7 @@ import { differenceInDays, parseISO, startOfDay } from "date-fns";
 export default function StudentManagement() {
   const [students, setStudents] = useState<Student[]>([]);
   const [search, setSearch] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<string | null>(null);
@@ -53,32 +53,55 @@ export default function StudentManagement() {
     membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
   });
 
-  useEffect(() => {
-    setIsLoading(true);
-    const q = query(collection(db, "students"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const studentData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Student[];
-        setStudents(studentData);
-        setIsLoading(false);
-      },
-      (error) => {
-        console.error("Firestore sync error:", error);
-        toast({
-          variant: "destructive",
-          title: "Connection Error",
-          description: "Failed to sync student records from Firestore.",
-        });
-        setIsLoading(false);
-      }
-    );
+  // Exact Logic Requested: studentsCollection reference
+  const studentsCollection = collection(db, "students");
 
-    return () => unsubscribe();
+  // Exact Logic Requested: loadStudents function
+  const loadStudents = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const q = query(studentsCollection, orderBy("createdAt", "desc"));
+      const snapshot = await getDocs(q);
+      const studentData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Student[];
+      setStudents(studentData);
+    } catch (error) {
+      console.error("Firestore load error:", error);
+      toast({
+        variant: "destructive",
+        title: "Load Error",
+        description: "Failed to fetch students from Firestore.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   }, [toast]);
+
+  // Initial load
+  useEffect(() => {
+    loadStudents();
+  }, [loadStudents]);
+
+  // Exact Logic Requested: handleAddStudent wrapper
+  const handleAddStudent = async (studentData: any) => {
+    await addDoc(studentsCollection, {
+      ...studentData,
+      role: "student",
+      createdAt: new Date().toISOString(),
+    });
+    await loadStudents();
+  };
+
+  const handleUpdateStudent = async (id: string, studentData: any) => {
+    const studentDocRef = doc(db, "students", id);
+    await updateDoc(studentDocRef, {
+      ...studentData,
+      updatedAt: new Date().toISOString(),
+    });
+    await loadStudents();
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,22 +131,14 @@ export default function StudentManagement() {
         seatNumber: seatNum,
         membershipStartDate: formData.membershipStartDate,
         membershipExpiryDate: formData.membershipExpiryDate,
-        updatedAt: new Date().toISOString(),
       };
 
       if (editingStudent) {
-        // Update existing record
-        const studentDocRef = doc(db, "students", editingStudent.id);
-        await updateDoc(studentDocRef, studentData);
-        toast({ title: "Updated", description: "Student details saved successfully." });
+        await handleUpdateStudent(editingStudent.id, studentData);
+        toast({ title: "Updated", description: "Student details saved." });
       } else {
-        // Create new record - Explicitly using addDoc to collection(db, "students")
-        await addDoc(collection(db, "students"), {
-          ...studentData,
-          role: "student",
-          createdAt: new Date().toISOString(),
-        });
-        toast({ title: "Registered", description: "New student added to database." });
+        await handleAddStudent(studentData);
+        toast({ title: "Registered", description: "Saved to Firestore." });
       }
       
       setIsAddOpen(false);
@@ -150,6 +165,7 @@ export default function StudentManagement() {
     try {
       await deleteDoc(doc(db, "students", studentToDelete));
       toast({ title: "Deleted", description: "Student record removed." });
+      await loadStudents();
     } catch (error) {
       console.error("Firestore delete error:", error);
       toast({ variant: "destructive", title: "Error", description: "Failed to delete record." });
@@ -181,7 +197,7 @@ export default function StudentManagement() {
             <h1 className="text-3xl font-bold font-headline text-primary tracking-tight">Manage Students</h1>
             <p className="text-sm text-muted-foreground flex items-center gap-1">
               <RefreshCw className={cn("h-3 w-3", isLoading && "animate-spin")} />
-              {isLoading ? "Syncing..." : "Connected to Database"}
+              {isLoading ? "Syncing..." : "Connected to Firestore"}
             </p>
           </div>
           <Button onClick={() => { 
@@ -223,7 +239,7 @@ export default function StudentManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
+                {isLoading && students.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">Syncing records...</TableCell>
                   </TableRow>
@@ -313,7 +329,7 @@ export default function StudentManagement() {
               </div>
               <DialogFooter className="pt-4">
                 <Button type="submit" className="w-full">
-                  {editingStudent ? "Update Record" : "Add to Firestore"}
+                  {editingStudent ? "Update Record" : "Save to Firestore"}
                 </Button>
               </DialogFooter>
             </form>
