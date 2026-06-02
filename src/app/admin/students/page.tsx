@@ -20,7 +20,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { db } from "@/lib/firebase";
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
+import { 
+  collection, 
+  onSnapshot, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  doc, 
+  query, 
+  orderBy 
+} from "firebase/firestore";
 import { Student } from "@/lib/types";
 import { Search, Plus, Edit, Trash2, Calendar, ShieldCheck, AlertTriangle, Clock, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -46,9 +55,10 @@ export default function StudentManagement() {
 
   useEffect(() => {
     setIsLoading(true);
-    // Real-time listener for the students collection ensures the list is always refreshed
+    // Real-time listener for the students collection ensures data is always synced from Firestore
+    const q = query(collection(db, "students"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(
-      collection(db, "students"),
+      q,
       (snapshot) => {
         const studentData = snapshot.docs.map(doc => ({
           id: doc.id,
@@ -71,11 +81,12 @@ export default function StudentManagement() {
     return () => unsubscribe();
   }, [toast]);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const seatNum = formData.seatNumber ? parseInt(formData.seatNumber) : null;
 
+    // Duplicate Seat Validation
     if (seatNum !== null) {
       const isOccupied = students.some(s => 
         s.seatNumber === seatNum && s.id !== editingStudent?.id
@@ -85,82 +96,73 @@ export default function StudentManagement() {
         toast({
           variant: "destructive",
           title: "Seat Assignment Error",
-          description: "Seat already occupied. Please select another seat.",
+          description: `Seat ${seatNum} is already assigned to another student.`,
         });
         return;
       }
     }
 
-    if (editingStudent) {
-      const data = {
-        name: formData.name,
-        mobile: formData.mobile,
-        seatNumber: seatNum,
-        membershipStartDate: formData.membershipStartDate,
-        membershipExpiryDate: formData.membershipExpiryDate,
-        role: "student" as const,
-        updatedAt: new Date().toISOString(),
-      };
+    try {
+      if (editingStudent) {
+        // Update existing record
+        const studentDocRef = doc(db, "students", editingStudent.id);
+        await updateDoc(studentDocRef, {
+          name: formData.name,
+          mobile: formData.mobile,
+          seatNumber: seatNum,
+          membershipStartDate: formData.membershipStartDate,
+          membershipExpiryDate: formData.membershipExpiryDate,
+          updatedAt: new Date().toISOString(),
+        });
+        toast({ title: "Updated", description: "Student details saved to database." });
+      } else {
+        // Create new record
+        await addDoc(collection(db, "students"), {
+          name: formData.name,
+          mobile: formData.mobile,
+          seatNumber: seatNum,
+          membershipStartDate: formData.membershipStartDate,
+          membershipExpiryDate: formData.membershipExpiryDate,
+          role: "student",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        toast({ title: "Registered", description: "New student added to database successfully." });
+      }
       
-      const studentDocRef = doc(db, "students", editingStudent.id);
-      updateDoc(studentDocRef, data)
-        .then(() => {
-          toast({ title: "Updated", description: "Student updated successfully." });
-          setIsAddOpen(false);
-          setEditingStudent(null);
-        })
-        .catch((error) => {
-          console.error("Error updating student:", error);
-          toast({ variant: "destructive", title: "Update Failed", description: "Could not save changes to Firestore." });
-        });
-    } else {
-      // Logic for adding a new student using addDoc(collection(db, "students"), studentData)
-      const studentData = {
-        name: formData.name,
-        mobile: formData.mobile,
-        seatNumber: seatNum,
-        membershipStartDate: formData.membershipStartDate,
-        membershipExpiryDate: formData.membershipExpiryDate,
-        role: "student" as const,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      addDoc(collection(db, "students"), studentData)
-        .then((docRef) => {
-          console.log("Document written successfully with ID: ", docRef.id);
-          toast({ title: "Student Registered", description: `${formData.name} has been added to the database.` });
-          setFormData({ 
-            name: "", 
-            mobile: "", 
-            seatNumber: "", 
-            membershipStartDate: new Date().toISOString().split('T')[0], 
-            membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] 
-          });
-          setIsAddOpen(false);
-        })
-        .catch((error) => {
-          console.error("Error adding student to Firestore: ", error);
-          toast({ 
-            variant: "destructive", 
-            title: "Registration Failed", 
-            description: error.message || "Failed to create student record in Firestore." 
-          });
-        });
+      setIsAddOpen(false);
+      setEditingStudent(null);
+      setFormData({
+        name: "",
+        mobile: "",
+        seatNumber: "",
+        membershipStartDate: new Date().toISOString().split('T')[0],
+        membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      });
+    } catch (error) {
+      console.error("Firestore write error:", error);
+      toast({
+        variant: "destructive",
+        title: "Registration Failed",
+        description: "Could not save records to Firestore. Check your connection.",
+      });
     }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!studentToDelete) return;
 
-    deleteDoc(doc(db, "students", studentToDelete))
-      .then(() => {
-        toast({ title: "Success", description: "Student deleted successfully." });
-      })
-      .catch((error) => {
-        console.error("Error deleting student from Firestore:", error);
-        toast({ variant: "destructive", title: "Error", description: "Failed to delete student record." });
+    try {
+      await deleteDoc(doc(db, "students", studentToDelete));
+      toast({ title: "Record Deleted", description: "Student record has been permanently removed." });
+    } catch (error) {
+      console.error("Firestore delete error:", error);
+      toast({
+        variant: "destructive",
+        title: "Deletion Failed",
+        description: "Failed to remove student from database.",
       });
+    }
 
     setStudentToDelete(null);
   };
@@ -189,7 +191,7 @@ export default function StudentManagement() {
             <h1 className="text-3xl font-bold font-headline text-primary tracking-tight">Manage Students</h1>
             <p className="text-sm text-muted-foreground flex items-center gap-1">
               <RefreshCw className={cn("h-3 w-3", isLoading && "animate-spin")} />
-              {isLoading ? "Syncing..." : "Live Connection"}
+              {isLoading ? "Syncing..." : "Live Cloud Connection"}
             </p>
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
@@ -272,7 +274,7 @@ export default function StudentManagement() {
                             </div>
                             <div className="text-[10px] text-muted-foreground mt-1 ml-1 flex items-center gap-1">
                               <Calendar className="h-2.5 w-2.5" />
-                              {student.membershipExpiryDate}
+                              Exp: {student.membershipExpiryDate}
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
@@ -340,7 +342,7 @@ export default function StudentManagement() {
               </div>
               <DialogFooter className="pt-4">
                 <Button type="submit" className="w-full h-12 text-lg font-bold shadow-lg shadow-primary/20">
-                  {editingStudent ? "Update Records" : "Register Student"}
+                  {editingStudent ? "Update Record" : "Register Student"}
                 </Button>
               </DialogFooter>
             </form>
@@ -350,9 +352,9 @@ export default function StudentManagement() {
         <AlertDialog open={!!studentToDelete} onOpenChange={(open) => !open && setStudentToDelete(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Are you sure you want to delete this student?</AlertDialogTitle>
+              <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
               <AlertDialogDescription>
-                This action cannot be undone. This will permanently remove the student's records from Firestore and vacate their assigned seat.
+                Are you sure you want to delete this student? This will permanently remove their record from Firestore and vacate their seat.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
