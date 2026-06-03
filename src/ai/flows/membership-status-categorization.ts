@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Provides an AI-generated natural language summary of student membership statuses.
@@ -85,7 +86,17 @@ const membershipStatusCategorizationFlow = ai.defineFlow(
     const currentDateString = now.toISOString().split('T')[0];
 
     const studentsWithStatus = input.students.map((student) => {
-      const expiryDate = new Date(student.membershipExpiryDate);
+      // Map Firestore fields if the input ones are missing
+      const startDate = student.membershipStartDate || (student as any).joinDate || currentDateString;
+      const expiryDateStr = student.membershipExpiryDate || (student as any).expiryDate || currentDateString;
+
+      let expiryDate: Date;
+      try {
+        expiryDate = new Date(expiryDateStr);
+        if (isNaN(expiryDate.getTime())) throw new Error("Invalid date");
+      } catch (e) {
+        expiryDate = now;
+      }
       expiryDate.setHours(0, 0, 0, 0); // Normalize to start of day
 
       const diffTime = expiryDate.getTime() - now.getTime();
@@ -94,6 +105,8 @@ const membershipStatusCategorizationFlow = ai.defineFlow(
 
       return {
         ...student,
+        membershipStartDate: startDate,
+        membershipExpiryDate: expiryDateStr,
         remainingDays,
         isExpired,
       };

@@ -8,6 +8,10 @@ export interface Student {
   seatNumber: number | null;
   membershipStartDate: string;
   membershipExpiryDate: string;
+  // Firestore fallbacks
+  joinDate?: string;
+  expiryDate?: string;
+  feeStatus?: string;
   role: UserRole;
   createdAt: string;
 }

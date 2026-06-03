@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -44,7 +45,16 @@ export default function StudentDashboard() {
   const vacantCount = totalSeats - occupiedCount;
   
   const today = startOfDay(new Date());
-  const expiryDate = student ? startOfDay(parseISO(student.membershipExpiryDate)) : today;
+  const expiryStr = student?.membershipExpiryDate || student?.expiryDate;
+  
+  let expiryDate: Date;
+  try {
+    expiryDate = expiryStr ? startOfDay(parseISO(expiryStr)) : today;
+    if (isNaN(expiryDate.getTime())) expiryDate = today;
+  } catch (e) {
+    expiryDate = today;
+  }
+
   const diffDays = differenceInDays(expiryDate, today);
   const remainingDays = Math.max(0, diffDays);
   const isExpired = diffDays < 0;
@@ -96,7 +106,7 @@ export default function StudentDashboard() {
                 <div className="flex flex-col justify-end items-end space-y-4">
                   <div className="text-right">
                     <p className="text-white/70 text-sm">Valid Until</p>
-                    <p className="text-xl font-bold">{student?.membershipExpiryDate}</p>
+                    <p className="text-xl font-bold">{expiryStr || "N/A"}</p>
                   </div>
                   <div className="bg-white/10 p-4 rounded-xl backdrop-blur-sm border border-white/20 w-full sm:w-auto">
                     <div className="flex justify-between items-center gap-4 text-xs font-bold uppercase tracking-widest">

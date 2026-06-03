@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -21,14 +22,20 @@ export function SeatGrid({ students, onSeatClick, isAdmin }: SeatGridProps) {
     return students.find(s => s.seatNumber === seatNum);
   };
 
-  const getStatusColor = (expiryDate: string) => {
-    const today = startOfDay(new Date());
-    const exp = startOfDay(parseISO(expiryDate));
-    const days = differenceInDays(exp, today);
+  const getStatusColor = (expiryDateStr?: string) => {
+    if (!expiryDateStr) return "bg-muted border-border text-muted-foreground";
+    
+    try {
+      const today = startOfDay(new Date());
+      const exp = startOfDay(parseISO(expiryDateStr));
+      const days = differenceInDays(exp, today);
 
-    if (days < 0) return "bg-destructive border-destructive text-destructive-foreground shadow-destructive/20";
-    if (days <= 7) return "bg-warning border-warning text-warning-foreground shadow-warning/20";
-    return "bg-primary border-primary text-primary-foreground shadow-primary/20";
+      if (days < 0) return "bg-destructive border-destructive text-destructive-foreground shadow-destructive/20";
+      if (days <= 7) return "bg-warning border-warning text-warning-foreground shadow-warning/20";
+      return "bg-primary border-primary text-primary-foreground shadow-primary/20";
+    } catch (e) {
+      return "bg-muted border-border text-muted-foreground";
+    }
   };
 
   return (
@@ -57,13 +64,21 @@ export function SeatGrid({ students, onSeatClick, isAdmin }: SeatGridProps) {
           {seats.map((seatNum) => {
             const student = getStudentForSeat(seatNum);
             const isOccupied = !!student;
-            const statusColor = isOccupied ? getStatusColor(student.membershipExpiryDate) : "";
+            const expiryStr = student?.membershipExpiryDate || student?.expiryDate;
+            const statusColor = isOccupied ? getStatusColor(expiryStr) : "";
             
             const today = startOfDay(new Date());
-            const exp = isOccupied ? startOfDay(parseISO(student.membershipExpiryDate)) : today;
+            let exp: Date;
+            try {
+              exp = expiryStr ? startOfDay(parseISO(expiryStr)) : today;
+              if (isNaN(exp.getTime())) exp = today;
+            } catch (e) {
+              exp = today;
+            }
+
             const diffDays = isOccupied ? differenceInDays(exp, today) : 0;
-            const isExpired = diffDays < 0;
-            const isExpiringSoon = diffDays >= 0 && diffDays <= 7;
+            const isExpired = isOccupied && diffDays < 0;
+            const isExpiringSoon = isOccupied && diffDays >= 0 && diffDays <= 7;
 
             return (
               <Tooltip key={seatNum}>
@@ -97,7 +112,7 @@ export function SeatGrid({ students, onSeatClick, isAdmin }: SeatGridProps) {
                         )}>
                           {isExpired ? "Expired" : isExpiringSoon ? `Expiring in ${diffDays}d` : "Active"}
                         </p>
-                        <p className="text-[10px] text-muted-foreground">End: {student.membershipExpiryDate}</p>
+                        <p className="text-[10px] text-muted-foreground">End: {expiryStr || "N/A"}</p>
                       </>
                     ) : (
                       <p className="text-xs">Available</p>

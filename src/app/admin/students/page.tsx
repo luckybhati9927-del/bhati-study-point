@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
@@ -57,7 +58,6 @@ export default function StudentManagement() {
 
   const loadStudents = useCallback(async () => {
     setIsLoading(true);
-    console.log("[Firestore Debug] Attempting to load students list...");
     try {
       const q = query(studentsCollection, orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
@@ -65,10 +65,8 @@ export default function StudentManagement() {
         id: doc.id,
         ...doc.data()
       })) as Student[];
-      console.log("[Firestore Debug] Successfully loaded", studentData.length, "students.");
       setStudents(studentData);
     } catch (error: any) {
-      console.error("[Firestore Debug] Load Error:", error);
       toast({
         variant: "destructive",
         title: "Database Error",
@@ -89,7 +87,6 @@ export default function StudentManagement() {
 
     const seatNum = formData.seatNumber ? parseInt(formData.seatNumber) : null;
 
-    // Validate seat availability locally before write
     if (seatNum !== null) {
       const isOccupied = students.some(s => 
         s.seatNumber === seatNum && s.id !== editingStudent?.id
@@ -106,7 +103,6 @@ export default function StudentManagement() {
     }
 
     setIsSaving(true);
-    console.log("[Firestore Debug] Initiating save request...");
 
     const studentData = {
       name: formData.name,
@@ -114,36 +110,29 @@ export default function StudentManagement() {
       seatNumber: seatNum,
       membershipStartDate: formData.membershipStartDate,
       membershipExpiryDate: formData.membershipExpiryDate,
+      // Fallback for Firestore field consistency
+      joinDate: formData.membershipStartDate,
+      expiryDate: formData.membershipExpiryDate,
       role: "student" as const,
       updatedAt: new Date().toISOString(),
     };
 
     try {
       if (editingStudent) {
-        console.log("[Firestore Debug] Before updateDoc for ID:", editingStudent.id);
         await updateDoc(doc(db, "students", editingStudent.id), studentData);
-        console.log("[Firestore Debug] After updateDoc SUCCESS");
         toast({ title: "Updated", description: "Student record has been updated." });
       } else {
-        console.log("Before addDoc");
-        const docRef = await addDoc(studentsCollection, {
+        await addDoc(studentsCollection, {
           ...studentData,
           createdAt: new Date().toISOString(),
         });
-        console.log("After addDoc", docRef.id);
         toast({ title: "Registered", description: "New student added to database." });
       }
 
-      // Success sequence
       setIsAddOpen(false);
       setEditingStudent(null);
-      await loadStudents(); // Refresh the list from server
+      await loadStudents();
     } catch (error: any) {
-      console.error("[Firestore Debug] Save Error Details:", {
-        message: error.message,
-        code: error.code,
-        fullError: error
-      });
       toast({
         variant: "destructive",
         title: "Firestore Error",
@@ -151,19 +140,16 @@ export default function StudentManagement() {
       });
     } finally {
       setIsSaving(false);
-      console.log("[Firestore Debug] Save process complete.");
     }
   };
 
   const confirmDelete = async () => {
     if (!studentToDelete) return;
-    console.log("[Firestore Debug] Deleting student ID:", studentToDelete);
     try {
       await deleteDoc(doc(db, "students", studentToDelete));
       toast({ title: "Deleted", description: "Record removed from database." });
       await loadStudents();
     } catch (error: any) {
-      console.error("[Firestore Debug] Delete Error:", error);
       toast({ 
         variant: "destructive", 
         title: "Delete Failed", 
@@ -178,14 +164,21 @@ export default function StudentManagement() {
     s.mobile.includes(search)
   );
 
-  const getStatus = (expiryDate: string) => {
+  const getStatus = (student: Student) => {
     const today = startOfDay(new Date());
-    const exp = startOfDay(parseISO(expiryDate));
-    const days = differenceInDays(exp, today);
+    const expiryStr = student.membershipExpiryDate || student.expiryDate;
+    if (!expiryStr) return { label: "Unknown", color: "bg-muted text-muted-foreground", icon: AlertTriangle };
+    
+    try {
+      const exp = startOfDay(parseISO(expiryStr));
+      const days = differenceInDays(exp, today);
 
-    if (days < 0) return { label: "Expired", color: "bg-destructive text-destructive-foreground", icon: AlertTriangle };
-    if (days <= 7) return { label: "Expiring Soon", color: "bg-warning text-warning-foreground", icon: Clock };
-    return { label: "Active", color: "bg-success text-success-foreground", icon: ShieldCheck };
+      if (days < 0) return { label: "Expired", color: "bg-destructive text-destructive-foreground", icon: AlertTriangle };
+      if (days <= 7) return { label: "Expiring Soon", color: "bg-warning text-warning-foreground", icon: Clock };
+      return { label: "Active", color: "bg-success text-success-foreground", icon: ShieldCheck };
+    } catch (e) {
+      return { label: "Invalid Date", color: "bg-muted text-muted-foreground", icon: AlertTriangle };
+    }
   };
 
   return (
@@ -249,7 +242,7 @@ export default function StudentManagement() {
                   </TableRow>
                 ) : (
                   filteredStudents.map((student) => {
-                    const status = getStatus(student.membershipExpiryDate);
+                    const status = getStatus(student);
                     return (
                       <TableRow key={student.id} className="group">
                         <TableCell><div className="font-bold">{student.name}</div></TableCell>
@@ -276,8 +269,8 @@ export default function StudentManagement() {
                                 name: student.name,
                                 mobile: student.mobile,
                                 seatNumber: student.seatNumber?.toString() || "",
-                                membershipStartDate: student.membershipStartDate,
-                                membershipExpiryDate: student.membershipExpiryDate,
+                                membershipStartDate: student.membershipStartDate || student.joinDate || "",
+                                membershipExpiryDate: student.membershipExpiryDate || student.expiryDate || "",
                               });
                               setIsAddOpen(true);
                             }}>

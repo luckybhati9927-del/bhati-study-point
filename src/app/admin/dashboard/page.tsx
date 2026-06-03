@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -7,7 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 import { Student } from "@/lib/types";
-import { Users, UserCheck, UserPlus, AlertCircle, Sparkles, Clock } from "lucide-react";
+import { Users, UserPlus, AlertCircle, Sparkles, Clock } from "lucide-react";
 import { aiMembershipStatusOverview } from "@/ai/flows/membership-status-categorization";
 import { differenceInDays, parseISO, startOfDay } from "date-fns";
 
@@ -26,12 +27,14 @@ export default function AdminDashboard() {
       setLoading(false);
       
       if (studentData.length > 0) {
-        aiMembershipStatusOverview({ students: studentData.map(s => ({
-          id: s.id,
-          name: s.name,
-          membershipStartDate: s.membershipStartDate,
-          membershipExpiryDate: s.membershipExpiryDate
-        }))}).then(res => setAiSummary(res.summary));
+        aiMembershipStatusOverview({ 
+          students: studentData.map(s => ({
+            id: s.id,
+            name: s.name,
+            membershipStartDate: s.membershipStartDate || s.joinDate || "",
+            membershipExpiryDate: s.membershipExpiryDate || s.expiryDate || ""
+          }))
+        }).then(res => setAiSummary(res.summary));
       } else {
         setAiSummary("No students registered yet.");
       }
@@ -45,15 +48,28 @@ export default function AdminDashboard() {
   const vacantSeats = totalSeats - occupiedSeats;
   
   const today = startOfDay(new Date());
+  
   const expiringSoonCount = students.filter(s => {
-    const exp = startOfDay(parseISO(s.membershipExpiryDate));
-    const days = differenceInDays(exp, today);
-    return days >= 0 && days <= 7;
+    const expiryStr = s.membershipExpiryDate || s.expiryDate;
+    if (!expiryStr) return false;
+    try {
+      const exp = startOfDay(parseISO(expiryStr));
+      const days = differenceInDays(exp, today);
+      return days >= 0 && days <= 7;
+    } catch (e) {
+      return false;
+    }
   }).length;
   
   const expiredCount = students.filter(s => {
-    const exp = startOfDay(parseISO(s.membershipExpiryDate));
-    return differenceInDays(exp, today) < 0;
+    const expiryStr = s.membershipExpiryDate || s.expiryDate;
+    if (!expiryStr) return false;
+    try {
+      const exp = startOfDay(parseISO(expiryStr));
+      return differenceInDays(exp, today) < 0;
+    } catch (e) {
+      return false;
+    }
   }).length;
 
   const stats = [
@@ -120,7 +136,7 @@ export default function AdminDashboard() {
                       <div key={s.id} className="flex items-center gap-3 text-sm">
                         <div className="w-2 h-2 rounded-full bg-primary" />
                         <span className="font-medium">{s.name}</span>
-                        <span className="text-muted-foreground text-[10px] ml-auto">{s.createdAt.split('T')[0]}</span>
+                        <span className="text-muted-foreground text-[10px] ml-auto">{s.createdAt?.split('T')[0] || "N/A"}</span>
                       </div>
                     ))}
                   </div>
