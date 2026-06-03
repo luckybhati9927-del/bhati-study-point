@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +32,7 @@ import {
   orderBy
 } from "firebase/firestore";
 import { Student } from "@/lib/types";
-import { Search, Plus, Edit, Trash2, ShieldCheck, AlertTriangle, Clock, RefreshCw } from "lucide-react";
+import { Search, Plus, Edit, Trash2, ShieldCheck, AlertTriangle, Clock, RefreshCw, Key } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { differenceInDays, parseISO, startOfDay } from "date-fns";
@@ -45,10 +46,20 @@ export default function StudentManagement() {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<string | null>(null);
   const { toast } = useToast();
+  const router = useRouter();
+
+  // Basic Route Guard
+  useEffect(() => {
+    const role = localStorage.getItem("userRole");
+    if (role !== "admin") {
+      router.push("/");
+    }
+  }, [router]);
 
   const [formData, setFormData] = useState({
     name: "",
     mobile: "",
+    password: "",
     seatNumber: "",
     membershipStartDate: new Date().toISOString().split('T')[0],
     membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -59,16 +70,12 @@ export default function StudentManagement() {
   const loadStudents = useCallback(async () => {
     setIsLoading(true);
     try {
-      console.log("[Students] Manual fetch from Firestore...");
       const q = query(studentsCollection, orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
       const studentData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Student[];
-      
-      console.log("[Students] Fetched count:", studentData.length);
-      // Replaces state with exactly what is in Firestore
       setStudents(studentData);
     } catch (error: any) {
       console.error("[Students] Fetch error:", error);
@@ -101,22 +108,20 @@ export default function StudentManagement() {
         toast({
           variant: "destructive",
           title: "Seat Busy",
-          description: `Seat ${seatNum} is already taken by another student.`,
+          description: `Seat ${seatNum} is already taken.`,
         });
         return;
       }
     }
 
     setIsSaving(true);
-    console.log("[Students] Initiating save request...");
-
     const studentData = {
       name: formData.name,
       mobile: formData.mobile,
+      password: formData.password || "bhati123", // Default if not provided
       seatNumber: seatNum,
       membershipStartDate: formData.membershipStartDate,
       membershipExpiryDate: formData.membershipExpiryDate,
-      // Consistency fields
       joinDate: formData.membershipStartDate,
       expiryDate: formData.membershipExpiryDate,
       role: "student" as const,
@@ -125,17 +130,14 @@ export default function StudentManagement() {
 
     try {
       if (editingStudent) {
-        console.log("[Students] Updating existing doc:", editingStudent.id);
         await updateDoc(doc(db, "students", editingStudent.id), studentData);
-        toast({ title: "Updated", description: "Student record has been updated." });
+        toast({ title: "Updated", description: "Record has been updated." });
       } else {
-        console.log("[Students] Adding new doc...");
-        const docRef = await addDoc(studentsCollection, {
+        await addDoc(studentsCollection, {
           ...studentData,
           createdAt: new Date().toISOString(),
         });
-        console.log("[Students] New doc added with ID:", docRef.id);
-        toast({ title: "Registered", description: "New student added to database." });
+        toast({ title: "Registered", description: "New student added." });
       }
 
       setIsAddOpen(false);
@@ -146,7 +148,7 @@ export default function StudentManagement() {
       toast({
         variant: "destructive",
         title: "Firestore Error",
-        description: `Save failed: ${error.message || "Network or permission error."}`,
+        description: `Save failed: ${error.message}`,
       });
     } finally {
       setIsSaving(false);
@@ -156,17 +158,11 @@ export default function StudentManagement() {
   const confirmDelete = async () => {
     if (!studentToDelete) return;
     try {
-      console.log("[Students] Deleting doc:", studentToDelete);
       await deleteDoc(doc(db, "students", studentToDelete));
-      toast({ title: "Deleted", description: "Record removed from database." });
+      toast({ title: "Deleted", description: "Record removed." });
       await loadStudents();
     } catch (error: any) {
-      console.error("[Students] Delete error:", error);
-      toast({ 
-        variant: "destructive", 
-        title: "Delete Failed", 
-        description: error.message || "Failed to delete record." 
-      });
+      toast({ variant: "destructive", title: "Error", description: "Delete failed." });
     }
     setStudentToDelete(null);
   };
@@ -189,7 +185,7 @@ export default function StudentManagement() {
       if (days <= 7) return { label: "Expiring Soon", color: "bg-warning text-warning-foreground", icon: Clock };
       return { label: "Active", color: "bg-success text-success-foreground", icon: ShieldCheck };
     } catch (e) {
-      return { label: "Invalid Date", color: "bg-muted text-muted-foreground", icon: AlertTriangle };
+      return { label: "Invalid", color: "bg-muted text-muted-foreground", icon: AlertTriangle };
     }
   };
 
@@ -199,7 +195,7 @@ export default function StudentManagement() {
       <main className="container mx-auto p-4 sm:p-6 space-y-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="text-3xl font-bold font-headline text-primary tracking-tight">Manage Students</h1>
+            <h1 className="text-3xl font-bold font-headline text-primary tracking-tight">Student Registry</h1>
             <p className="text-sm text-muted-foreground flex items-center gap-1">
               <RefreshCw className={cn("h-3 w-3", isLoading && "animate-spin")} />
               {isLoading ? "Fetching data..." : `Syncing ${students.length} records`}
@@ -210,6 +206,7 @@ export default function StudentManagement() {
             setFormData({
               name: "",
               mobile: "",
+              password: "",
               seatNumber: "",
               membershipStartDate: new Date().toISOString().split('T')[0],
               membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -225,7 +222,7 @@ export default function StudentManagement() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name or mobile..."
+                placeholder="Search students..."
                 className="pl-10 h-11 bg-background"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -244,11 +241,7 @@ export default function StudentManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading && students.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">Syncing records...</TableCell>
-                  </TableRow>
-                ) : filteredStudents.length === 0 ? (
+                {filteredStudents.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No records found.</TableCell>
                   </TableRow>
@@ -275,11 +268,12 @@ export default function StudentManagement() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => {
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
                               setEditingStudent(student);
                               setFormData({
                                 name: student.name,
                                 mobile: student.mobile,
+                                password: student.password || "",
                                 seatNumber: student.seatNumber?.toString() || "",
                                 membershipStartDate: student.membershipStartDate || student.joinDate || "",
                                 membershipExpiryDate: student.membershipExpiryDate || student.expiryDate || "",
@@ -306,7 +300,7 @@ export default function StudentManagement() {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="font-headline text-2xl text-primary">
-                {editingStudent ? "Edit Student" : "Add Student"}
+                {editingStudent ? "Edit Student" : "New Registration"}
               </DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSave} className="space-y-4 pt-4">
@@ -314,9 +308,17 @@ export default function StudentManagement() {
                 <Label>Full Name</Label>
                 <Input required disabled={isSaving} value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
               </div>
-              <div className="space-y-2">
-                <Label>Mobile Number</Label>
-                <Input required disabled={isSaving} value={formData.mobile} onChange={e => setFormData({...formData, mobile: e.target.value})} />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Mobile</Label>
+                  <Input required disabled={isSaving} value={formData.mobile} onChange={e => setFormData({...formData, mobile: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    Password <Key className="h-3 w-3 text-muted-foreground" />
+                  </Label>
+                  <Input type="text" disabled={isSaving} value={formData.password} placeholder="bhati123" onChange={e => setFormData({...formData, password: e.target.value})} />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -334,7 +336,7 @@ export default function StudentManagement() {
               </div>
               <DialogFooter className="pt-4">
                 <Button type="submit" className="w-full" disabled={isSaving}>
-                  {isSaving ? "Syncing..." : (editingStudent ? "Update Record" : "Save to Firestore")}
+                  {isSaving ? "Processing..." : (editingStudent ? "Update Record" : "Register Student")}
                 </Button>
               </DialogFooter>
             </form>
@@ -345,7 +347,7 @@ export default function StudentManagement() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Record?</AlertDialogTitle>
-              <AlertDialogDescription>This will permanently remove the student from the database. This action cannot be undone.</AlertDialogDescription>
+              <AlertDialogDescription>This action will permanently remove the student from the database.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>

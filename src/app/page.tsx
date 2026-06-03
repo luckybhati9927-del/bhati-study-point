@@ -1,55 +1,92 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { LogIn, BookOpen } from "lucide-react";
+import { LogIn, BookOpen, ShieldCheck, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { db, auth } from "@/lib/firebase";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function Home() {
   const [mobile, setMobile] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  useEffect(() => {
+    // Clear any stale sessions on the login page
+    localStorage.removeItem("userRole");
+    localStorage.removeItem("userMobile");
+    localStorage.removeItem("studentId");
+  }, []);
+
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!mobile) return;
+    if (!email || !password) return;
 
     setIsLoading(true);
     try {
-      // For Admin demo purposes, let's say "9999999999" is admin
-      if (mobile === "9999999999") {
-        localStorage.setItem("userRole", "admin");
-        localStorage.setItem("userMobile", mobile);
-        router.push("/admin/dashboard");
-        return;
-      }
+      await signInWithEmailAndPassword(auth, email, password);
+      localStorage.setItem("userRole", "admin");
+      localStorage.setItem("userEmail", email);
+      toast({ title: "Welcome, Admin", description: "Authenticated successfully." });
+      router.push("/admin/dashboard");
+    } catch (error: any) {
+      console.error("Admin Login Error:", error);
+      toast({
+        variant: "destructive",
+        title: "Authentication Failed",
+        description: "Invalid admin credentials.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-      // Check Firestore for student
+  const handleStudentLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mobile || !password) return;
+
+    setIsLoading(true);
+    try {
       const q = query(collection(db, "students"), where("mobile", "==", mobile));
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
-        const studentData = querySnapshot.docs[0].data();
-        localStorage.setItem("userRole", "student");
-        localStorage.setItem("userMobile", mobile);
-        localStorage.setItem("studentId", querySnapshot.docs[0].id);
-        router.push("/student/dashboard");
+        const studentDoc = querySnapshot.docs[0];
+        const studentData = studentDoc.data();
+        
+        if (studentData.password === password) {
+          localStorage.setItem("userRole", "student");
+          localStorage.setItem("userMobile", mobile);
+          localStorage.setItem("studentId", studentDoc.id);
+          toast({ title: "Login Successful", description: `Welcome back, ${studentData.name}.` });
+          router.push("/student/dashboard");
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Access Denied",
+            description: "Incorrect password for this mobile number.",
+          });
+        }
       } else {
         toast({
           variant: "destructive",
-          title: "Access Denied",
-          description: "Mobile number not found. Please contact the administrator.",
+          title: "Account Not Found",
+          description: "Mobile number not registered. Please contact admin.",
         });
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Student Login Error:", error);
       toast({
         variant: "destructive",
         title: "Error",
@@ -69,46 +106,92 @@ export default function Home() {
               <BookOpen className="w-12 h-12 text-primary-foreground" />
             </div>
           </div>
-          <h1 className="text-4xl font-bold font-headline text-primary tracking-tight">BHATI STUDY POINT</h1>
-          <p className="text-muted-foreground font-medium">Premier Library Management System</p>
+          <h1 className="text-4xl font-bold font-headline text-primary tracking-tight uppercase">Bhati Study Point</h1>
+          <p className="text-muted-foreground font-medium">Secure Library Access Portal</p>
         </div>
 
         <Card className="border-none shadow-xl bg-card/80 backdrop-blur-md">
-          <CardHeader>
-            <CardTitle className="text-xl font-headline">Welcome Back</CardTitle>
-            <CardDescription>Login with your registered mobile number</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="mobile">Mobile Number</Label>
-                <Input
-                  id="mobile"
-                  type="tel"
-                  placeholder="Enter 10 digit number"
-                  value={mobile}
-                  onChange={(e) => setMobile(e.target.value)}
-                  className="h-12 text-lg"
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full h-12 text-lg font-medium" disabled={isLoading}>
-                {isLoading ? (
-                  "Verifying..."
-                ) : (
-                  <>
-                    <LogIn className="mr-2 h-5 w-5" />
-                    Enter Library
-                  </>
-                )}
-              </Button>
-            </form>
+          <CardContent className="pt-6">
+            <Tabs defaultValue="student" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-6">
+                <TabsTrigger value="student" className="flex items-center gap-2">
+                  <User className="h-4 w-4" /> Student
+                </TabsTrigger>
+                <TabsTrigger value="admin" className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4" /> Admin
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="student">
+                <form onSubmit={handleStudentLogin} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="mobile">Mobile Number</Label>
+                    <Input
+                      id="mobile"
+                      type="tel"
+                      placeholder="10 digit number"
+                      value={mobile}
+                      onChange={(e) => setMobile(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="s-password">Password</Label>
+                    <Input
+                      id="s-password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <Button type="submit" className="w-full h-11" disabled={isLoading}>
+                    {isLoading ? "Authenticating..." : "Enter Library"}
+                  </Button>
+                </form>
+              </TabsContent>
+
+              <TabsContent value="admin">
+                <form onSubmit={handleAdminLogin} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Admin Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="admin@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="a-password">Admin Password</Label>
+                    <Input
+                      id="a-password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <Button type="submit" className="w-full h-11" disabled={isLoading}>
+                    {isLoading ? "Logging in..." : "Administrator Login"}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
 
-        <p className="text-center text-sm text-muted-foreground">
-          Demo Admin: 9999999999
-        </p>
+        <div className="bg-muted/50 p-4 rounded-lg text-center space-y-1">
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Demo Credentials</p>
+          <div className="text-xs text-muted-foreground/80 space-y-1">
+            <p>Admin: admin@bhati.com / admin123</p>
+            <p>Students: Use their mobile + registered password</p>
+          </div>
+        </div>
       </div>
     </div>
   );

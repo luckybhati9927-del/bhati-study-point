@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { SeatGrid } from "@/components/seats/SeatGrid";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -16,19 +17,25 @@ export default function StudentDashboard() {
   const [student, setStudent] = useState<Student | null>(null);
   const [allStudents, setAllStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
+    const role = localStorage.getItem("userRole");
     const studentId = localStorage.getItem("studentId");
-    if (studentId) {
-      const fetchStudent = async () => {
-        const docRef = doc(db, "students", studentId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setStudent({ id: docSnap.id, ...docSnap.data() } as Student);
-        }
-      };
-      fetchStudent();
+
+    if (role !== "student" || !studentId) {
+      router.push("/");
+      return;
     }
+
+    const fetchStudent = async () => {
+      const docRef = doc(db, "students", studentId);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setStudent({ id: docSnap.id, ...docSnap.data() } as Student);
+      }
+    };
+    fetchStudent();
 
     const unsubscribe = onSnapshot(collection(db, "students"), (snapshot) => {
       setAllStudents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Student[]);
@@ -36,9 +43,9 @@ export default function StudentDashboard() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [router]);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading portal...</div>;
+  if (loading) return null;
 
   const totalSeats = 70;
   const occupiedCount = allStudents.filter(s => s.seatNumber !== null).length;
@@ -108,19 +115,13 @@ export default function StudentDashboard() {
                     <p className="text-white/70 text-sm">Valid Until</p>
                     <p className="text-xl font-bold">{expiryStr || "N/A"}</p>
                   </div>
-                  <div className="bg-white/10 p-4 rounded-xl backdrop-blur-sm border border-white/20 w-full sm:w-auto">
-                    <div className="flex justify-between items-center gap-4 text-xs font-bold uppercase tracking-widest">
-                      <span>Status</span>
-                      <span className={cn(
-                        "px-2 py-0.5 rounded flex items-center gap-1",
-                        isExpired ? "bg-white text-destructive" : 
-                        isExpiringSoon ? "bg-white text-warning" : 
-                        "bg-white text-primary"
+                  <div className="bg-white/10 p-4 rounded-xl backdrop-blur-sm border border-white/20">
+                    <span className={cn(
+                        "px-3 py-1 rounded text-xs font-bold uppercase",
+                        isExpired ? "bg-white text-destructive" : "bg-white text-primary"
                       )}>
-                        {isExpired && <AlertTriangle className="h-3 w-3" />}
-                        {isExpired ? "Expired" : isExpiringSoon ? "Expiring Soon" : "Active"}
-                      </span>
-                    </div>
+                        {isExpired ? "Expired" : "Active"}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -134,7 +135,7 @@ export default function StudentDashboard() {
             <CardContent className="flex-1 flex flex-col justify-center gap-6">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground font-medium">Occupancy</span>
-                <span className="text-primary font-bold">{Math.round((occupiedCount / totalSeats) * 100)}% Full</span>
+                <span className="text-primary font-bold">{Math.round((occupiedCount / totalSeats) * 100)}%</span>
               </div>
               <div className="w-full bg-secondary h-3 rounded-full overflow-hidden">
                 <div 
@@ -144,12 +145,12 @@ export default function StudentDashboard() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-muted p-4 rounded-xl text-center">
-                  <p className="text-xs text-muted-foreground font-bold uppercase mb-1">Occupied</p>
                   <p className="text-2xl font-bold font-headline">{occupiedCount}</p>
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase">Occupied</p>
                 </div>
                 <div className="bg-muted p-4 rounded-xl text-center">
-                  <p className="text-xs text-muted-foreground font-bold uppercase mb-1">Vacant</p>
                   <p className="text-2xl font-bold font-headline">{vacantCount}</p>
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase">Vacant</p>
                 </div>
               </div>
             </CardContent>

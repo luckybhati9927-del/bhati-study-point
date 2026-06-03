@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { SeatGrid } from "@/components/seats/SeatGrid";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -13,21 +14,24 @@ import { aiMembershipStatusOverview } from "@/ai/flows/membership-status-categor
 import { differenceInDays, parseISO, startOfDay } from "date-fns";
 
 export default function AdminDashboard() {
-  // Initialize with an empty array to ensure NO mock data exists
   const [students, setStudents] = useState<Student[]>([]);
   const [aiSummary, setAiSummary] = useState<string>("Analyzing membership health...");
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
-    console.log("[Dashboard] Connecting to Firestore 'students' collection...");
+    const role = localStorage.getItem("userRole");
+    if (role !== "admin") {
+      router.push("/");
+      return;
+    }
+
     const unsubscribe = onSnapshot(collection(db, "students"), (snapshot) => {
-      // Create fresh array from snapshot docs ONLY
       const studentData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Student[];
       
-      console.log("[Dashboard] Students loaded from Firestore count:", studentData.length);
       setStudents(studentData);
       setLoading(false);
       
@@ -43,16 +47,14 @@ export default function AdminDashboard() {
       } else {
         setAiSummary("No students registered yet.");
       }
-    }, (error) => {
-      console.error("[Dashboard] Firestore error:", error);
-      setLoading(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [router]);
+
+  if (loading) return null;
 
   const totalSeats = 70;
-  // Calculate occupied seats directly from the Firestore-sourced students array
   const occupiedSeats = students.filter(s => s.seatNumber !== null && s.seatNumber !== undefined).length;
   const vacantSeats = totalSeats - occupiedSeats;
   
@@ -65,9 +67,7 @@ export default function AdminDashboard() {
       const exp = startOfDay(parseISO(expiryStr));
       const days = differenceInDays(exp, today);
       return days >= 0 && days <= 7;
-    } catch (e) {
-      return false;
-    }
+    } catch (e) { return false; }
   }).length;
   
   const expiredCount = students.filter(s => {
@@ -76,9 +76,7 @@ export default function AdminDashboard() {
     try {
       const exp = startOfDay(parseISO(expiryStr));
       return differenceInDays(exp, today) < 0;
-    } catch (e) {
-      return false;
-    }
+    } catch (e) { return false; }
   }).length;
 
   const stats = [
@@ -137,20 +135,6 @@ export default function AdminDashboard() {
                   <p className="text-sm leading-relaxed text-muted-foreground italic">
                     "{aiSummary}"
                   </p>
-                </div>
-                <div className="space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Recent Activity</h4>
-                  <div className="space-y-2">
-                    {students.slice(-3).reverse().map(s => (
-                      <div key={s.id} className="flex items-center gap-3 text-sm">
-                        <div className="w-2 h-2 rounded-full bg-primary" />
-                        <span className="font-medium">{s.name}</span>
-                        <span className="text-muted-foreground text-[10px] ml-auto">
-                          {(s.membershipStartDate || s.joinDate || "N/A")}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
                 </div>
               </div>
             </CardContent>

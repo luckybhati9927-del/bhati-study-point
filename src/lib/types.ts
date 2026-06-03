@@ -5,6 +5,7 @@ export interface Student {
   id: string;
   name: string;
   mobile: string;
+  password?: string; // Added for student login
   seatNumber: number | null;
   membershipStartDate: string;
   membershipExpiryDate: string;

@@ -5,6 +5,9 @@ import { useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { LogOut, LayoutDashboard, Users, Grid, UserCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { useToast } from "@/hooks/use-toast";
 
 interface NavbarProps {
   role: 'admin' | 'student';
@@ -13,10 +16,20 @@ interface NavbarProps {
 export function Navbar({ role }: NavbarProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const { toast } = useToast();
 
-  const handleLogout = () => {
-    localStorage.clear();
-    router.push("/");
+  const handleLogout = async () => {
+    try {
+      if (role === 'admin') {
+        await signOut(auth);
+      }
+      localStorage.clear();
+      toast({ title: "Logged Out", description: "You have been securely signed out." });
+      router.push("/");
+    } catch (error) {
+      console.error("Logout error:", error);
+      router.push("/");
+    }
   };
 
   const navItems = role === 'admin' 
