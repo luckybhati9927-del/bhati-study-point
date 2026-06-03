@@ -1,4 +1,3 @@
-
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
@@ -12,17 +11,16 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:123456789:web:abcdef"
 };
 
-console.log("[Firebase Debug] Initializing with config:", {
-  ...firebaseConfig,
-  apiKey: firebaseConfig.apiKey === "mock-api-key" ? "MISSING (Using Mock)" : "PRESENT (Masked)",
-});
+// Verbose Initialization Logs
+console.log("[Firebase Debug] Starting Initialization...");
+console.log("[Firebase Debug] Target Project ID:", firebaseConfig.projectId);
+console.log("[Firebase Debug] API Key Status:", firebaseConfig.apiKey === "mock-api-key" ? "USING MOCK (Check .env)" : "PROVIDED");
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// Global connection check
-console.log("[Firebase Debug] Services Initialized:", {
+console.log("[Firebase Debug] Services Status:", {
   appInitialized: !!app,
   firestoreInitialized: !!db,
   authInitialized: !!auth,
@@ -31,9 +29,9 @@ console.log("[Firebase Debug] Services Initialized:", {
 if (typeof window !== 'undefined') {
   onAuthStateChanged(auth, (user) => {
     if (user) {
-      console.log("[Firebase Debug] Auth State: User logged in", { uid: user.uid, email: user.email });
+      console.log("[Firebase Debug] Auth State Updated: User Logged In", { uid: user.uid });
     } else {
-      console.log("[Firebase Debug] Auth State: No user session");
+      console.log("[Firebase Debug] Auth State Updated: No User session");
     }
   });
 }

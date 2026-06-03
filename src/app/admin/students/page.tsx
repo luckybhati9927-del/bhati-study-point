@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
@@ -58,7 +57,7 @@ export default function StudentManagement() {
 
   const loadStudents = useCallback(async () => {
     setIsLoading(true);
-    console.log("[Firestore Debug] Attempting to fetch students from collection 'students'...");
+    console.log("[Firestore Debug] Attempting to fetch students...");
     try {
       const q = query(studentsCollection, orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
@@ -66,7 +65,7 @@ export default function StudentManagement() {
         id: doc.id,
         ...doc.data()
       })) as Student[];
-      console.log("[Firestore Debug] Fetch successful. Records count:", studentData.length);
+      console.log("[Firestore Debug] Students loaded successfully. Count:", studentData.length);
       setStudents(studentData);
     } catch (error: any) {
       console.error("[Firestore Debug] Load Error:", error);
@@ -84,13 +83,13 @@ export default function StudentManagement() {
     loadStudents();
   }, [loadStudents]);
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
 
     const seatNum = formData.seatNumber ? parseInt(formData.seatNumber) : null;
 
-    // Duplicate Seat Validation
+    // Local Seat Validation
     if (seatNum !== null) {
       const isOccupied = students.some(s => 
         s.seatNumber === seatNum && s.id !== editingStudent?.id
@@ -100,62 +99,77 @@ export default function StudentManagement() {
         toast({
           variant: "destructive",
           title: "Seat Assignment Error",
-          description: `Seat ${seatNum} is already assigned.`,
+          description: `Seat ${seatNum} is already assigned to someone else.`,
         });
         return;
       }
     }
 
     setIsSaving(true);
-    console.log("[Firestore Debug] Initiating save request...", { editing: !!editingStudent });
-    try {
-      const studentData = {
-        name: formData.name,
-        mobile: formData.mobile,
-        seatNumber: seatNum,
-        membershipStartDate: formData.membershipStartDate,
-        membershipExpiryDate: formData.membershipExpiryDate,
-      };
+    console.log("[Firestore Debug] Initiating save request...");
 
-      if (editingStudent) {
-        const studentDocRef = doc(db, "students", editingStudent.id);
-        await updateDoc(studentDocRef, {
-          ...studentData,
-          updatedAt: new Date().toISOString(),
+    const studentData = {
+      name: formData.name,
+      mobile: formData.mobile,
+      seatNumber: seatNum,
+      membershipStartDate: formData.membershipStartDate,
+      membershipExpiryDate: formData.membershipExpiryDate,
+      role: "student",
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (editingStudent) {
+      console.log("Before updateDoc for ID:", editingStudent.id);
+      updateDoc(doc(db, "students", editingStudent.id), studentData)
+        .then(() => {
+          console.log("After updateDoc Success");
+          toast({ title: "Updated", description: "Record successfully updated in Firestore." });
+          loadStudents().finally(() => {
+            setIsAddOpen(false);
+            setEditingStudent(null);
+            setIsSaving(false);
+          });
+        })
+        .catch((error: any) => {
+          console.error("Firestore Update Error:", error);
+          toast({
+            variant: "destructive",
+            title: "Save Failed",
+            description: `Error: ${error.message || "Check console for details."}`,
+          });
+          setIsSaving(false);
         });
-        console.log("[Firestore Debug] Update successful for ID:", editingStudent.id);
-        toast({ title: "Updated", description: "Record updated." });
-      } else {
-        const docRef = await addDoc(studentsCollection, {
-          ...studentData,
-          role: "student",
-          createdAt: new Date().toISOString(),
+    } else {
+      console.log("Before addDoc");
+      addDoc(studentsCollection, {
+        ...studentData,
+        createdAt: new Date().toISOString(),
+      })
+        .then((docRef) => {
+          console.log("After addDoc Success, Created ID:", docRef.id);
+          toast({ title: "Registered", description: "Student added to Firestore." });
+          loadStudents().finally(() => {
+            setIsAddOpen(false);
+            setIsSaving(false);
+          });
+        })
+        .catch((error: any) => {
+          console.error("Firestore Add Error:", error);
+          toast({
+            variant: "destructive",
+            title: "Save Failed",
+            description: `Error: ${error.message || "Check console for details."}`,
+          });
+          setIsSaving(false);
         });
-        console.log("[Firestore Debug] Add successful. Created ID:", docRef.id);
-        toast({ title: "Registered", description: "Saved to database." });
-      }
-      
-      await loadStudents();
-      setIsAddOpen(false);
-      setEditingStudent(null);
-    } catch (error: any) {
-      console.error("[Firestore Debug] Save Error:", error);
-      toast({
-        variant: "destructive",
-        title: "Firestore Error",
-        description: error.message || "Failed to save record.",
-      });
-    } finally {
-      setIsSaving(false);
     }
   };
 
   const confirmDelete = async () => {
     if (!studentToDelete) return;
-    console.log("[Firestore Debug] Initiating delete request for ID:", studentToDelete);
+    console.log("[Firestore Debug] Initiating delete for ID:", studentToDelete);
     try {
       await deleteDoc(doc(db, "students", studentToDelete));
-      console.log("[Firestore Debug] Delete successful.");
       toast({ title: "Deleted", description: "Record removed." });
       await loadStudents();
     } catch (error: any) {
@@ -193,7 +207,7 @@ export default function StudentManagement() {
             <h1 className="text-3xl font-bold font-headline text-primary tracking-tight">Manage Students</h1>
             <p className="text-sm text-muted-foreground flex items-center gap-1">
               <RefreshCw className={cn("h-3 w-3", isLoading && "animate-spin")} />
-              {isLoading ? "Syncing..." : "Database Connected"}
+              {isLoading ? "Syncing..." : "Live Firestore Data"}
             </p>
           </div>
           <Button onClick={() => { 
@@ -216,7 +230,7 @@ export default function StudentManagement() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search students..."
+                placeholder="Search by name or mobile..."
                 className="pl-10 h-11 bg-background"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -237,7 +251,7 @@ export default function StudentManagement() {
               <TableBody>
                 {isLoading && students.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">Syncing records...</TableCell>
+                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">Connecting to database...</TableCell>
                   </TableRow>
                 ) : filteredStudents.length === 0 ? (
                   <TableRow>
@@ -325,7 +339,7 @@ export default function StudentManagement() {
               </div>
               <DialogFooter className="pt-4">
                 <Button type="submit" className="w-full" disabled={isSaving}>
-                  {isSaving ? "Saving to Database..." : (editingStudent ? "Update Record" : "Add Student")}
+                  {isSaving ? "Saving to Firestore..." : (editingStudent ? "Update Record" : "Save Student")}
                 </Button>
               </DialogFooter>
             </form>
@@ -336,7 +350,7 @@ export default function StudentManagement() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Record?</AlertDialogTitle>
-              <AlertDialogDescription>This will permanently remove the student from Firestore.</AlertDialogDescription>
+              <AlertDialogDescription>This will permanently remove the student from Firestore. This action cannot be undone.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
