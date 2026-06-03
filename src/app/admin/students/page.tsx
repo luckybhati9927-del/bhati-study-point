@@ -40,6 +40,7 @@ export default function StudentManagement() {
   const [students, setStudents] = useState<Student[]>([]);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<string | null>(null);
@@ -53,10 +54,8 @@ export default function StudentManagement() {
     membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
   });
 
-  // Exact Logic Requested: studentsCollection reference
   const studentsCollection = collection(db, "students");
 
-  // Exact Logic Requested: loadStudents function
   const loadStudents = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -67,44 +66,25 @@ export default function StudentManagement() {
         ...doc.data()
       })) as Student[];
       setStudents(studentData);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Firestore load error:", error);
       toast({
         variant: "destructive",
         title: "Load Error",
-        description: "Failed to fetch students from Firestore.",
+        description: error.message || "Failed to fetch students from Firestore.",
       });
     } finally {
       setIsLoading(false);
     }
   }, [toast]);
 
-  // Initial load
   useEffect(() => {
     loadStudents();
   }, [loadStudents]);
 
-  // Exact Logic Requested: handleAddStudent wrapper
-  const handleAddStudent = async (studentData: any) => {
-    await addDoc(studentsCollection, {
-      ...studentData,
-      role: "student",
-      createdAt: new Date().toISOString(),
-    });
-    await loadStudents();
-  };
-
-  const handleUpdateStudent = async (id: string, studentData: any) => {
-    const studentDocRef = doc(db, "students", id);
-    await updateDoc(studentDocRef, {
-      ...studentData,
-      updatedAt: new Date().toISOString(),
-    });
-    await loadStudents();
-  };
-
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving) return;
 
     const seatNum = formData.seatNumber ? parseInt(formData.seatNumber) : null;
 
@@ -124,23 +104,36 @@ export default function StudentManagement() {
       }
     }
 
+    setIsSaving(true);
     try {
       const studentData = {
         name: formData.name,
         mobile: formData.mobile,
         seatNumber: seatNum,
-        membershipStartDate: formData.membershipStartDate,
-        membershipExpiryDate: formData.membershipExpiryDate,
+        membershipStartDate: formData.membershipStartDate, // Already YYYY-MM-DD string
+        membershipExpiryDate: formData.membershipExpiryDate, // Already YYYY-MM-DD string
       };
 
       if (editingStudent) {
-        await handleUpdateStudent(editingStudent.id, studentData);
-        toast({ title: "Updated", description: "Student details saved." });
+        const studentDocRef = doc(db, "students", editingStudent.id);
+        await updateDoc(studentDocRef, {
+          ...studentData,
+          updatedAt: new Date().toISOString(),
+        });
+        toast({ title: "Updated", description: "Student details saved successfully." });
       } else {
-        await handleAddStudent(studentData);
-        toast({ title: "Registered", description: "Saved to Firestore." });
+        await addDoc(studentsCollection, {
+          ...studentData,
+          role: "student",
+          createdAt: new Date().toISOString(),
+        });
+        toast({ title: "Registered", description: "Student added to Firestore successfully." });
       }
       
+      // Refresh list immediately after successful write
+      await loadStudents();
+      
+      // Only close and reset if the write succeeded
       setIsAddOpen(false);
       setEditingStudent(null);
       setFormData({
@@ -150,13 +143,15 @@ export default function StudentManagement() {
         membershipStartDate: new Date().toISOString().split('T')[0],
         membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       });
-    } catch (error) {
-      console.error("Firestore write error:", error);
+    } catch (error: any) {
+      console.error("Firestore write error details:", error);
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "Failed to save record to Firestore.",
+        title: "Firestore Error",
+        description: error.message || "Failed to save record. Check console for details.",
       });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -166,9 +161,13 @@ export default function StudentManagement() {
       await deleteDoc(doc(db, "students", studentToDelete));
       toast({ title: "Deleted", description: "Student record removed." });
       await loadStudents();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Firestore delete error:", error);
-      toast({ variant: "destructive", title: "Error", description: "Failed to delete record." });
+      toast({ 
+        variant: "destructive", 
+        title: "Delete Error", 
+        description: error.message || "Failed to delete record." 
+      });
     }
     setStudentToDelete(null);
   };
@@ -297,7 +296,12 @@ export default function StudentManagement() {
           </CardContent>
         </Card>
 
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+        <Dialog open={isAddOpen} onOpenChange={(open) => {
+          if (!isSaving) {
+            setIsAddOpen(open);
+            if (!open) setEditingStudent(null);
+          }
+        }}>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="font-headline text-2xl text-primary">
@@ -307,29 +311,29 @@ export default function StudentManagement() {
             <form onSubmit={handleSave} className="space-y-4 pt-4">
               <div className="space-y-2">
                 <Label>Full Name</Label>
-                <Input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                <Input required disabled={isSaving} value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
               </div>
               <div className="space-y-2">
                 <Label>Mobile Number</Label>
-                <Input required value={formData.mobile} onChange={e => setFormData({...formData, mobile: e.target.value})} />
+                <Input required disabled={isSaving} value={formData.mobile} onChange={e => setFormData({...formData, mobile: e.target.value})} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Seat (1-70)</Label>
-                  <Input type="number" min="1" max="70" value={formData.seatNumber} onChange={e => setFormData({...formData, seatNumber: e.target.value})} />
+                  <Input type="number" min="1" max="70" disabled={isSaving} value={formData.seatNumber} onChange={e => setFormData({...formData, seatNumber: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Start Date</Label>
-                  <Input type="date" value={formData.membershipStartDate} onChange={e => setFormData({...formData, membershipStartDate: e.target.value})} />
+                  <Input type="date" disabled={isSaving} value={formData.membershipStartDate} onChange={e => setFormData({...formData, membershipStartDate: e.target.value})} />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label>Expiry Date</Label>
-                <Input type="date" required value={formData.membershipExpiryDate} onChange={e => setFormData({...formData, membershipExpiryDate: e.target.value})} />
+                <Input type="date" required disabled={isSaving} value={formData.membershipExpiryDate} onChange={e => setFormData({...formData, membershipExpiryDate: e.target.value})} />
               </div>
               <DialogFooter className="pt-4">
-                <Button type="submit" className="w-full">
-                  {editingStudent ? "Update Record" : "Save to Firestore"}
+                <Button type="submit" className="w-full" disabled={isSaving}>
+                  {isSaving ? "Processing..." : (editingStudent ? "Update Record" : "Save to Firestore")}
                 </Button>
               </DialogFooter>
             </form>
