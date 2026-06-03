@@ -11,27 +11,32 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:123456789:web:abcdef"
 };
 
-// Verbose Initialization Logs
-console.log("[Firebase Debug] Starting Initialization...");
-console.log("[Firebase Debug] Target Project ID:", firebaseConfig.projectId);
-console.log("[Firebase Debug] API Key Status:", firebaseConfig.apiKey === "mock-api-key" ? "USING MOCK (Check .env)" : "PROVIDED");
+// Verbose Initialization Logs as requested
+console.log("[Firebase Debug] --- START INITIALIZATION ---");
+console.log("[Firebase Debug] NEXT_PUBLIC_FIREBASE_PROJECT_ID:", firebaseConfig.projectId);
+console.log("[Firebase Debug] API Key Status:", firebaseConfig.apiKey === "mock-api-key" ? "MISSING (.env not loaded?)" : "LOADED");
 
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
+let app;
+try {
+  app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+  console.log("[Firebase Debug] Firebase App initialized: SUCCESS");
+} catch (e) {
+  console.error("[Firebase Debug] Firebase App initialized: FAILED", e);
+}
 
-console.log("[Firebase Debug] Services Status:", {
-  appInitialized: !!app,
-  firestoreInitialized: !!db,
-  authInitialized: !!auth,
-});
+const db = getFirestore(app!);
+const auth = getAuth(app!);
+
+console.log("[Firebase Debug] Firestore initialized status: ", !!db);
+console.log("[Firebase Debug] Auth initialized status: ", !!auth);
+console.log("[Firebase Debug] --- END INITIALIZATION ---");
 
 if (typeof window !== 'undefined') {
   onAuthStateChanged(auth, (user) => {
     if (user) {
-      console.log("[Firebase Debug] Auth State Updated: User Logged In", { uid: user.uid });
+      console.log("[Firebase Debug] Auth state: User Logged In", { uid: user.uid });
     } else {
-      console.log("[Firebase Debug] Auth State Updated: No User session");
+      console.log("[Firebase Debug] Auth state: No user session found");
     }
   });
 }

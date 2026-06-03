@@ -57,7 +57,7 @@ export default function StudentManagement() {
 
   const loadStudents = useCallback(async () => {
     setIsLoading(true);
-    console.log("[Firestore Debug] Attempting to fetch students...");
+    console.log("[Firestore Debug] Attempting to load students list...");
     try {
       const q = query(studentsCollection, orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
@@ -65,14 +65,14 @@ export default function StudentManagement() {
         id: doc.id,
         ...doc.data()
       })) as Student[];
-      console.log("[Firestore Debug] Students loaded successfully. Count:", studentData.length);
+      console.log("[Firestore Debug] Successfully loaded", studentData.length, "students.");
       setStudents(studentData);
     } catch (error: any) {
       console.error("[Firestore Debug] Load Error:", error);
       toast({
         variant: "destructive",
-        title: "Connection Error",
-        description: error.message || "Could not connect to Firestore.",
+        title: "Database Error",
+        description: error.message || "Could not fetch student records.",
       });
     } finally {
       setIsLoading(false);
@@ -89,7 +89,7 @@ export default function StudentManagement() {
 
     const seatNum = formData.seatNumber ? parseInt(formData.seatNumber) : null;
 
-    // Local Seat Validation
+    // Validate seat availability locally before write
     if (seatNum !== null) {
       const isOccupied = students.some(s => 
         s.seatNumber === seatNum && s.id !== editingStudent?.id
@@ -98,8 +98,8 @@ export default function StudentManagement() {
       if (isOccupied) {
         toast({
           variant: "destructive",
-          title: "Seat Assignment Error",
-          description: `Seat ${seatNum} is already assigned to someone else.`,
+          title: "Seat Busy",
+          description: `Seat ${seatNum} is already taken by another student.`,
         });
         return;
       }
@@ -120,54 +120,53 @@ export default function StudentManagement() {
 
     try {
       if (editingStudent) {
-        console.log("Before updateDoc for ID:", editingStudent.id);
+        console.log("[Firestore Debug] Before updateDoc for ID:", editingStudent.id);
         await updateDoc(doc(db, "students", editingStudent.id), studentData);
-        console.log("After updateDoc Success");
-        toast({ title: "Updated", description: "Record successfully updated in Firestore." });
+        console.log("[Firestore Debug] After updateDoc SUCCESS");
+        toast({ title: "Updated", description: "Student record has been updated." });
       } else {
         console.log("Before addDoc");
         const docRef = await addDoc(studentsCollection, {
           ...studentData,
           createdAt: new Date().toISOString(),
         });
-        console.log("After addDoc Success, Created ID:", docRef.id);
-        toast({ title: "Registered", description: "Student added to Firestore." });
+        console.log("After addDoc", docRef.id);
+        toast({ title: "Registered", description: "New student added to database." });
       }
 
-      // If we reach here, the write was successful
+      // Success sequence
       setIsAddOpen(false);
       setEditingStudent(null);
-      await loadStudents();
+      await loadStudents(); // Refresh the list from server
     } catch (error: any) {
       console.error("[Firestore Debug] Save Error Details:", {
         message: error.message,
         code: error.code,
-        name: error.name,
-        stack: error.stack
+        fullError: error
       });
       toast({
         variant: "destructive",
-        title: "Firestore Save Error",
-        description: `Failed to write to database: ${error.message || "Check network or permissions."}`,
+        title: "Firestore Error",
+        description: `Save failed: ${error.message || "Network or permission error."}`,
       });
     } finally {
-      console.log("[Firestore Debug] Clearing loading state.");
       setIsSaving(false);
+      console.log("[Firestore Debug] Save process complete.");
     }
   };
 
   const confirmDelete = async () => {
     if (!studentToDelete) return;
-    console.log("[Firestore Debug] Initiating delete for ID:", studentToDelete);
+    console.log("[Firestore Debug] Deleting student ID:", studentToDelete);
     try {
       await deleteDoc(doc(db, "students", studentToDelete));
-      toast({ title: "Deleted", description: "Record removed." });
+      toast({ title: "Deleted", description: "Record removed from database." });
       await loadStudents();
     } catch (error: any) {
       console.error("[Firestore Debug] Delete Error:", error);
       toast({ 
         variant: "destructive", 
-        title: "Delete Error", 
+        title: "Delete Failed", 
         description: error.message || "Failed to delete record." 
       });
     }
@@ -198,7 +197,7 @@ export default function StudentManagement() {
             <h1 className="text-3xl font-bold font-headline text-primary tracking-tight">Manage Students</h1>
             <p className="text-sm text-muted-foreground flex items-center gap-1">
               <RefreshCw className={cn("h-3 w-3", isLoading && "animate-spin")} />
-              {isLoading ? "Syncing..." : "Live Firestore Data"}
+              {isLoading ? "Fetching data..." : "Connected to Firestore"}
             </p>
           </div>
           <Button onClick={() => { 
@@ -242,11 +241,11 @@ export default function StudentManagement() {
               <TableBody>
                 {isLoading && students.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">Connecting to database...</TableCell>
+                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">Syncing records...</TableCell>
                   </TableRow>
                 ) : filteredStudents.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No students found.</TableCell>
+                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No records found.</TableCell>
                   </TableRow>
                 ) : (
                   filteredStudents.map((student) => {
@@ -330,7 +329,7 @@ export default function StudentManagement() {
               </div>
               <DialogFooter className="pt-4">
                 <Button type="submit" className="w-full" disabled={isSaving}>
-                  {isSaving ? "Saving to Firestore..." : (editingStudent ? "Update Record" : "Save Student")}
+                  {isSaving ? "Syncing with Firestore..." : (editingStudent ? "Update Record" : "Save to Firestore")}
                 </Button>
               </DialogFooter>
             </form>
@@ -341,7 +340,7 @@ export default function StudentManagement() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Record?</AlertDialogTitle>
-              <AlertDialogDescription>This will permanently remove the student from Firestore. This action cannot be undone.</AlertDialogDescription>
+              <AlertDialogDescription>This will permanently remove the student from the database. This action cannot be undone.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
