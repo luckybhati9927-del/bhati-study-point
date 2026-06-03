@@ -13,16 +13,21 @@ import { aiMembershipStatusOverview } from "@/ai/flows/membership-status-categor
 import { differenceInDays, parseISO, startOfDay } from "date-fns";
 
 export default function AdminDashboard() {
+  // Initialize with an empty array to ensure NO mock data exists
   const [students, setStudents] = useState<Student[]>([]);
   const [aiSummary, setAiSummary] = useState<string>("Analyzing membership health...");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    console.log("[Dashboard] Connecting to Firestore 'students' collection...");
     const unsubscribe = onSnapshot(collection(db, "students"), (snapshot) => {
+      // Create fresh array from snapshot docs ONLY
       const studentData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Student[];
+      
+      console.log("[Dashboard] Students loaded from Firestore count:", studentData.length);
       setStudents(studentData);
       setLoading(false);
       
@@ -38,13 +43,17 @@ export default function AdminDashboard() {
       } else {
         setAiSummary("No students registered yet.");
       }
+    }, (error) => {
+      console.error("[Dashboard] Firestore error:", error);
+      setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
   const totalSeats = 70;
-  const occupiedSeats = students.filter(s => s.seatNumber !== null).length;
+  // Calculate occupied seats directly from the Firestore-sourced students array
+  const occupiedSeats = students.filter(s => s.seatNumber !== null && s.seatNumber !== undefined).length;
   const vacantSeats = totalSeats - occupiedSeats;
   
   const today = startOfDay(new Date());
@@ -136,7 +145,9 @@ export default function AdminDashboard() {
                       <div key={s.id} className="flex items-center gap-3 text-sm">
                         <div className="w-2 h-2 rounded-full bg-primary" />
                         <span className="font-medium">{s.name}</span>
-                        <span className="text-muted-foreground text-[10px] ml-auto">{s.createdAt?.split('T')[0] || "N/A"}</span>
+                        <span className="text-muted-foreground text-[10px] ml-auto">
+                          {(s.membershipStartDate || s.joinDate || "N/A")}
+                        </span>
                       </div>
                     ))}
                   </div>

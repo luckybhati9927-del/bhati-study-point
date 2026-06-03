@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -20,8 +21,16 @@ export default function AdminSeats() {
   const { toast } = useToast();
 
   useEffect(() => {
+    console.log("[Seats] Listening to Firestore students...");
     const unsubscribe = onSnapshot(collection(db, "students"), (snapshot) => {
-      setStudents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Student[]);
+      const studentData = snapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data() 
+      })) as Student[];
+      
+      console.log("[Seats] Total documents from Firestore:", studentData.length);
+      // Replaces the entire list to avoid duplicates
+      setStudents(studentData);
     });
     return () => unsubscribe();
   }, []);
@@ -39,7 +48,10 @@ export default function AdminSeats() {
     const previousOccupant = students.find(s => s.seatNumber === selectedSeat);
     if (previousOccupant && previousOccupant.id !== targetStudentId) {
       updateDoc(doc(db, "students", previousOccupant.id), { seatNumber: null })
-        .catch(() => toast({ variant: "destructive", title: "Error", description: "Failed to vacate old occupant." }));
+        .catch((e) => {
+          console.error("Vacate error:", e);
+          toast({ variant: "destructive", title: "Error", description: "Failed to vacate old occupant." });
+        });
     }
 
     // 2. Assign to new student if not "none"
@@ -49,7 +61,8 @@ export default function AdminSeats() {
         .then(() => {
           toast({ title: "Seat Assigned", description: `Seat ${selectedSeat} assigned to ${studentToAssign?.name}.` });
         })
-        .catch(() => {
+        .catch((e) => {
+          console.error("Assign error:", e);
           toast({ variant: "destructive", title: "Error", description: "Failed to update seat assignment." });
         });
     } else if (previousOccupant) {

@@ -59,14 +59,19 @@ export default function StudentManagement() {
   const loadStudents = useCallback(async () => {
     setIsLoading(true);
     try {
+      console.log("[Students] Manual fetch from Firestore...");
       const q = query(studentsCollection, orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
       const studentData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Student[];
+      
+      console.log("[Students] Fetched count:", studentData.length);
+      // Replaces state with exactly what is in Firestore
       setStudents(studentData);
     } catch (error: any) {
+      console.error("[Students] Fetch error:", error);
       toast({
         variant: "destructive",
         title: "Database Error",
@@ -103,6 +108,7 @@ export default function StudentManagement() {
     }
 
     setIsSaving(true);
+    console.log("[Students] Initiating save request...");
 
     const studentData = {
       name: formData.name,
@@ -110,7 +116,7 @@ export default function StudentManagement() {
       seatNumber: seatNum,
       membershipStartDate: formData.membershipStartDate,
       membershipExpiryDate: formData.membershipExpiryDate,
-      // Fallback for Firestore field consistency
+      // Consistency fields
       joinDate: formData.membershipStartDate,
       expiryDate: formData.membershipExpiryDate,
       role: "student" as const,
@@ -119,13 +125,16 @@ export default function StudentManagement() {
 
     try {
       if (editingStudent) {
+        console.log("[Students] Updating existing doc:", editingStudent.id);
         await updateDoc(doc(db, "students", editingStudent.id), studentData);
         toast({ title: "Updated", description: "Student record has been updated." });
       } else {
-        await addDoc(studentsCollection, {
+        console.log("[Students] Adding new doc...");
+        const docRef = await addDoc(studentsCollection, {
           ...studentData,
           createdAt: new Date().toISOString(),
         });
+        console.log("[Students] New doc added with ID:", docRef.id);
         toast({ title: "Registered", description: "New student added to database." });
       }
 
@@ -133,6 +142,7 @@ export default function StudentManagement() {
       setEditingStudent(null);
       await loadStudents();
     } catch (error: any) {
+      console.error("[Students] Save error:", error);
       toast({
         variant: "destructive",
         title: "Firestore Error",
@@ -146,10 +156,12 @@ export default function StudentManagement() {
   const confirmDelete = async () => {
     if (!studentToDelete) return;
     try {
+      console.log("[Students] Deleting doc:", studentToDelete);
       await deleteDoc(doc(db, "students", studentToDelete));
       toast({ title: "Deleted", description: "Record removed from database." });
       await loadStudents();
     } catch (error: any) {
+      console.error("[Students] Delete error:", error);
       toast({ 
         variant: "destructive", 
         title: "Delete Failed", 
@@ -190,7 +202,7 @@ export default function StudentManagement() {
             <h1 className="text-3xl font-bold font-headline text-primary tracking-tight">Manage Students</h1>
             <p className="text-sm text-muted-foreground flex items-center gap-1">
               <RefreshCw className={cn("h-3 w-3", isLoading && "animate-spin")} />
-              {isLoading ? "Fetching data..." : "Connected to Firestore"}
+              {isLoading ? "Fetching data..." : `Syncing ${students.length} records`}
             </p>
           </div>
           <Button onClick={() => { 
@@ -322,7 +334,7 @@ export default function StudentManagement() {
               </div>
               <DialogFooter className="pt-4">
                 <Button type="submit" className="w-full" disabled={isSaving}>
-                  {isSaving ? "Syncing with Firestore..." : (editingStudent ? "Update Record" : "Save to Firestore")}
+                  {isSaving ? "Syncing..." : (editingStudent ? "Update Record" : "Save to Firestore")}
                 </Button>
               </DialogFooter>
             </form>
