@@ -58,6 +58,7 @@ export default function StudentManagement() {
 
   const loadStudents = useCallback(async () => {
     setIsLoading(true);
+    console.log("[Firestore Debug] Attempting to fetch students from collection 'students'...");
     try {
       const q = query(studentsCollection, orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
@@ -65,13 +66,14 @@ export default function StudentManagement() {
         id: doc.id,
         ...doc.data()
       })) as Student[];
+      console.log("[Firestore Debug] Fetch successful. Records count:", studentData.length);
       setStudents(studentData);
     } catch (error: any) {
-      console.error("Firestore load error:", error);
+      console.error("[Firestore Debug] Load Error:", error);
       toast({
         variant: "destructive",
-        title: "Load Error",
-        description: error.message || "Failed to fetch students from Firestore.",
+        title: "Connection Error",
+        description: error.message || "Could not connect to Firestore.",
       });
     } finally {
       setIsLoading(false);
@@ -98,20 +100,21 @@ export default function StudentManagement() {
         toast({
           variant: "destructive",
           title: "Seat Assignment Error",
-          description: `Seat ${seatNum} is already assigned to another student.`,
+          description: `Seat ${seatNum} is already assigned.`,
         });
         return;
       }
     }
 
     setIsSaving(true);
+    console.log("[Firestore Debug] Initiating save request...", { editing: !!editingStudent });
     try {
       const studentData = {
         name: formData.name,
         mobile: formData.mobile,
         seatNumber: seatNum,
-        membershipStartDate: formData.membershipStartDate, // Already YYYY-MM-DD string
-        membershipExpiryDate: formData.membershipExpiryDate, // Already YYYY-MM-DD string
+        membershipStartDate: formData.membershipStartDate,
+        membershipExpiryDate: formData.membershipExpiryDate,
       };
 
       if (editingStudent) {
@@ -120,35 +123,27 @@ export default function StudentManagement() {
           ...studentData,
           updatedAt: new Date().toISOString(),
         });
-        toast({ title: "Updated", description: "Student details saved successfully." });
+        console.log("[Firestore Debug] Update successful for ID:", editingStudent.id);
+        toast({ title: "Updated", description: "Record updated." });
       } else {
-        await addDoc(studentsCollection, {
+        const docRef = await addDoc(studentsCollection, {
           ...studentData,
           role: "student",
           createdAt: new Date().toISOString(),
         });
-        toast({ title: "Registered", description: "Student added to Firestore successfully." });
+        console.log("[Firestore Debug] Add successful. Created ID:", docRef.id);
+        toast({ title: "Registered", description: "Saved to database." });
       }
       
-      // Refresh list immediately after successful write
       await loadStudents();
-      
-      // Only close and reset if the write succeeded
       setIsAddOpen(false);
       setEditingStudent(null);
-      setFormData({
-        name: "",
-        mobile: "",
-        seatNumber: "",
-        membershipStartDate: new Date().toISOString().split('T')[0],
-        membershipExpiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      });
     } catch (error: any) {
-      console.error("Firestore write error details:", error);
+      console.error("[Firestore Debug] Save Error:", error);
       toast({
         variant: "destructive",
         title: "Firestore Error",
-        description: error.message || "Failed to save record. Check console for details.",
+        description: error.message || "Failed to save record.",
       });
     } finally {
       setIsSaving(false);
@@ -157,12 +152,14 @@ export default function StudentManagement() {
 
   const confirmDelete = async () => {
     if (!studentToDelete) return;
+    console.log("[Firestore Debug] Initiating delete request for ID:", studentToDelete);
     try {
       await deleteDoc(doc(db, "students", studentToDelete));
-      toast({ title: "Deleted", description: "Student record removed." });
+      console.log("[Firestore Debug] Delete successful.");
+      toast({ title: "Deleted", description: "Record removed." });
       await loadStudents();
     } catch (error: any) {
-      console.error("Firestore delete error:", error);
+      console.error("[Firestore Debug] Delete Error:", error);
       toast({ 
         variant: "destructive", 
         title: "Delete Error", 
@@ -196,7 +193,7 @@ export default function StudentManagement() {
             <h1 className="text-3xl font-bold font-headline text-primary tracking-tight">Manage Students</h1>
             <p className="text-sm text-muted-foreground flex items-center gap-1">
               <RefreshCw className={cn("h-3 w-3", isLoading && "animate-spin")} />
-              {isLoading ? "Syncing..." : "Connected to Firestore"}
+              {isLoading ? "Syncing..." : "Database Connected"}
             </p>
           </div>
           <Button onClick={() => { 
@@ -219,7 +216,7 @@ export default function StudentManagement() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name or mobile..."
+                placeholder="Search students..."
                 className="pl-10 h-11 bg-background"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -296,12 +293,7 @@ export default function StudentManagement() {
           </CardContent>
         </Card>
 
-        <Dialog open={isAddOpen} onOpenChange={(open) => {
-          if (!isSaving) {
-            setIsAddOpen(open);
-            if (!open) setEditingStudent(null);
-          }
-        }}>
+        <Dialog open={isAddOpen} onOpenChange={(open) => !isSaving && setIsAddOpen(open)}>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="font-headline text-2xl text-primary">
@@ -333,7 +325,7 @@ export default function StudentManagement() {
               </div>
               <DialogFooter className="pt-4">
                 <Button type="submit" className="w-full" disabled={isSaving}>
-                  {isSaving ? "Processing..." : (editingStudent ? "Update Record" : "Save to Firestore")}
+                  {isSaving ? "Saving to Database..." : (editingStudent ? "Update Record" : "Add Student")}
                 </Button>
               </DialogFooter>
             </form>
@@ -344,7 +336,7 @@ export default function StudentManagement() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Record?</AlertDialogTitle>
-              <AlertDialogDescription>This action will permanently remove the student from the database.</AlertDialogDescription>
+              <AlertDialogDescription>This will permanently remove the student from Firestore.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
