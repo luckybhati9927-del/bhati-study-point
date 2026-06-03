@@ -83,7 +83,7 @@ export default function StudentManagement() {
     loadStudents();
   }, [loadStudents]);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
 
@@ -114,54 +114,45 @@ export default function StudentManagement() {
       seatNumber: seatNum,
       membershipStartDate: formData.membershipStartDate,
       membershipExpiryDate: formData.membershipExpiryDate,
-      role: "student",
+      role: "student" as const,
       updatedAt: new Date().toISOString(),
     };
 
-    if (editingStudent) {
-      console.log("Before updateDoc for ID:", editingStudent.id);
-      updateDoc(doc(db, "students", editingStudent.id), studentData)
-        .then(() => {
-          console.log("After updateDoc Success");
-          toast({ title: "Updated", description: "Record successfully updated in Firestore." });
-          loadStudents().finally(() => {
-            setIsAddOpen(false);
-            setEditingStudent(null);
-            setIsSaving(false);
-          });
-        })
-        .catch((error: any) => {
-          console.error("Firestore Update Error:", error);
-          toast({
-            variant: "destructive",
-            title: "Save Failed",
-            description: `Error: ${error.message || "Check console for details."}`,
-          });
-          setIsSaving(false);
+    try {
+      if (editingStudent) {
+        console.log("Before updateDoc for ID:", editingStudent.id);
+        await updateDoc(doc(db, "students", editingStudent.id), studentData);
+        console.log("After updateDoc Success");
+        toast({ title: "Updated", description: "Record successfully updated in Firestore." });
+      } else {
+        console.log("Before addDoc");
+        const docRef = await addDoc(studentsCollection, {
+          ...studentData,
+          createdAt: new Date().toISOString(),
         });
-    } else {
-      console.log("Before addDoc");
-      addDoc(studentsCollection, {
-        ...studentData,
-        createdAt: new Date().toISOString(),
-      })
-        .then((docRef) => {
-          console.log("After addDoc Success, Created ID:", docRef.id);
-          toast({ title: "Registered", description: "Student added to Firestore." });
-          loadStudents().finally(() => {
-            setIsAddOpen(false);
-            setIsSaving(false);
-          });
-        })
-        .catch((error: any) => {
-          console.error("Firestore Add Error:", error);
-          toast({
-            variant: "destructive",
-            title: "Save Failed",
-            description: `Error: ${error.message || "Check console for details."}`,
-          });
-          setIsSaving(false);
-        });
+        console.log("After addDoc Success, Created ID:", docRef.id);
+        toast({ title: "Registered", description: "Student added to Firestore." });
+      }
+
+      // If we reach here, the write was successful
+      setIsAddOpen(false);
+      setEditingStudent(null);
+      await loadStudents();
+    } catch (error: any) {
+      console.error("[Firestore Debug] Save Error Details:", {
+        message: error.message,
+        code: error.code,
+        name: error.name,
+        stack: error.stack
+      });
+      toast({
+        variant: "destructive",
+        title: "Firestore Save Error",
+        description: `Failed to write to database: ${error.message || "Check network or permissions."}`,
+      });
+    } finally {
+      console.log("[Firestore Debug] Clearing loading state.");
+      setIsSaving(false);
     }
   };
 
