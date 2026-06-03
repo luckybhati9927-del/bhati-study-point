@@ -3,7 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: 'Bhati Study Point | Library Management',
+  title: 'BHATI STUDY POINT | Library Management',
   description: 'Modern Study Space Management System',
   manifest: '/manifest.json',
   appleWebApp: {
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#2E3A8C',
+  themeColor: '#4F46E5',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
